@@ -3,19 +3,19 @@
 -- Migration depuis Firestore. Source de vérité côté serveur.
 -- ============================================================
 
-create extension if not exists "uuid-ossp";
-create extension if not exists pg_cron;
+-- uuid: gen_random_uuid() est natif (pgcrypto), rien à installer
+-- pg_cron : à activer plus tard via Dashboard -> Database -> Extensions (nécessaire seulement pour le cron du Morning Brief, Phase 7 du runbook)
 
 -- ── Tenancy ──────────────────────────────────────────────────
 create table organizations (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   name text not null,
   plan text not null default 'pilot',
   created_at timestamptz not null default now()
 );
 
 create table teams (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   name text not null,
   sport text not null default 'basketball',
@@ -26,7 +26,7 @@ create table teams (
 );
 
 create table seasons (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   team_id uuid not null references teams(id) on delete cascade,
   label text not null,
   starts_on date not null,
@@ -57,7 +57,7 @@ create table memberships (
 
 -- ── Séances (sync ICS) ───────────────────────────────────────
 create table sessions (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   team_id uuid not null references teams(id) on delete cascade,
   season_id uuid references seasons(id),
   title text,
@@ -95,7 +95,7 @@ create table team_questionnaires (
 
 -- ── Réponses ─────────────────────────────────────────────────
 create table responses (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   team_id uuid not null references teams(id) on delete cascade,
   session_id uuid not null references sessions(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -153,7 +153,7 @@ create table rules (
 );
 
 create table flags (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   team_id uuid not null references teams(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   rule_id text not null references rules(id),
@@ -166,7 +166,7 @@ create table flags (
 
 -- ── Briefs (sortie LLM) + boucle de feedback coach ───────────
 create table briefs (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   team_id uuid not null references teams(id) on delete cascade,
   brief_date date not null,
   body text not null,                -- narration LLM ; chaque phrase cite un chiffre
@@ -179,7 +179,7 @@ create table briefs (
 
 -- Le carburant du futur entraînement : ce que le coach juge utile.
 create table coach_feedback (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   team_id uuid not null references teams(id) on delete cascade,
   coach_id uuid not null references auth.users(id),
   brief_id uuid references briefs(id) on delete cascade,
@@ -191,7 +191,7 @@ create table coach_feedback (
 
 -- Journal LLM (coûts, audit)
 create table llm_logs (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   team_id uuid references teams(id),
   purpose text not null,             -- 'morning_brief' | 'weekly_synthesis'
   model text not null,
