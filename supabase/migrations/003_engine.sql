@@ -45,7 +45,7 @@ group by user_id, team_id, (submitted_at at time zone 'UTC')::date;
 -- EMA 28 j (alpha = 2/29 ≈ 0.0690) avec carry-forward des jours manquants —
 -- port exact de processDARData(). Recursive CTE sur calendrier continu.
 create or replace view v_ema_baseline as
-with bounds as (
+with recursive bounds as (
   select user_id, team_id, min(day) as d0, max(day) as d1
   from v_daily_scores group by user_id, team_id
 ),
@@ -118,3 +118,18 @@ from daily_metrics dm
 join memberships m on m.user_id = dm.user_id and m.team_id = dm.team_id
 left join flags f on f.user_id = dm.user_id and f.day = dm.day
 left join coach_feedback cf on cf.flag_id = f.id;
+
+-- Évaluateur de règle : exécute condition_sql (écrite par Gabin, table rules,
+-- accessible en écriture uniquement via service_role) contre v_engine.
+create or replace function eval_rule(p_rule text, p_user uuid, p_day date)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare cond text; hit boolean;
+begin
+  select condition_sql into cond from rules where id = p_rule and enabled = true;
+  if cond is null then return false; end if;
+  execute format(
+    'select exists(select 1 from v_engine where user_id = $1 and day = $2 and (%s))', cond
+  ) into hit using p_user, p_day;
+  return coalesce(hit, false);
+end $$;
+revoke execute on function eval_rule(text, uuid, date) from anon, authenticated;
