@@ -12,6 +12,8 @@ import {
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { auth, db, app } from "../services/firebaseConfig";
 import { createMembershipClientOnly } from "../src/services/membership";
+import { USE_SUPABASE } from "../src/lib/supabase";
+import { signUp as supaSignUp, joinTeam as supaJoinTeam } from "../src/lib/ctpApi";
 
 export default function StitchCreateAccountScreen() {
   const navigation = useNavigation();
@@ -40,7 +42,35 @@ export default function StitchCreateAccountScreen() {
       }
 
       setLoading(true);
-      
+
+      // ── Chemin Supabase (V2) ──────────────────────────────
+      if (USE_SUPABASE) {
+        try {
+          const { data, error } = await supaSignUp(formData.email.trim(), formData.password);
+          if (error) throw error;
+          if (!data?.session) {
+            Alert.alert(
+              "Vérifie ta boîte mail",
+              "Confirme ton adresse email puis connecte-toi. (Ou désactive la confirmation email dans Supabase Auth pour le pilote.)"
+            );
+            setLoading(false);
+            return;
+          }
+          await supaJoinTeam(
+            formData.teamCode.trim(),
+            role.toLowerCase() === "coach" ? "coach" : "athlete",
+            formData.fullName.trim()
+          );
+          console.log("[CREATE][SUPA] compte + adhésion OK — AuthGate route par rôle");
+        } catch (err) {
+          console.error("[CREATE][SUPA] error", err);
+          Alert.alert("Erreur", err?.message || "Création de compte impossible");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
       // Vérifier le code d'accès AVANT de créer le compte
       // Le rôle est déterminé par quel champ Firestore correspond au code saisi :
       //   coachCode  → role = 'coach'

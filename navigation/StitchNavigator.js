@@ -6,6 +6,8 @@ import { onAuthStateChanged, setPersistence, browserLocalPersistence } from "fir
 import { auth, db } from "../services/firebaseConfig";
 import { doc, getDoc, getDocFromServer, setDoc, updateDoc, increment, serverTimestamp, onSnapshot } from "firebase/firestore";
 import SplashScreen from "../src/components/SplashScreen";
+import { USE_SUPABASE } from "../src/lib/supabase";
+import { getSession as supaGetSession, onAuthChange as supaOnAuthChange, getMyMembership as supaGetMyMembership } from "../src/lib/ctpApi";
 import OnboardingNotifScreen from "../src/screens/OnboardingNotifScreen";
 
 // Import Stitch screens
@@ -424,6 +426,7 @@ function AuthGate({ pendingDeepLink, pendingJoinCode, navigationRef }) {
 
   // Process pending join code after auth is confirmed
   React.useEffect(() => {
+    if (USE_SUPABASE) return; // géré par joinTeam côté Supabase
     if (!state.user || state.roleLoading || !pendingJoinCode?.current) return;
     const code = pendingJoinCode.current;
     pendingJoinCode.current = null; // consume immediately to avoid re-runs
@@ -447,8 +450,41 @@ function AuthGate({ pendingDeepLink, pendingJoinCode, navigationRef }) {
   }, [state.user, state.roleLoading]);
 
   React.useEffect(() => {
+    // ── Chemin Supabase (V2) ─────────────────────────────────
+    if (USE_SUPABASE) {
+      let done = false;
+      const applyUser = async (sessUser) => {
+        if (!sessUser) {
+          if (!done) setState({ loading: false, user: null, userRole: null, authReady: true, roleLoading: false, onboardingComplete: true });
+          return;
+        }
+        let roleFromDb = "athlete";
+        try {
+          const m = await supaGetMyMembership();
+          if (m?.role) roleFromDb = String(m.role).trim().toLowerCase();
+          else console.warn("[SUPA] utilisateur sans équipe — rôle athlete par défaut");
+        } catch (e) {
+          console.warn("[SUPA] getMyMembership failed:", e?.message);
+        }
+        console.log("[SUPA] auth OK:", sessUser.email, "| role:", roleFromDb);
+        if (!done) setState({
+          loading: false,
+          user: { uid: sessUser.id, email: sessUser.email, displayName: sessUser.email },
+          userRole: roleFromDb,
+          authReady: true,
+          roleLoading: false,
+          onboardingComplete: true,
+        });
+      };
+      supaGetSession().then(({ data }) => applyUser(data?.session?.user ?? null));
+      const { data: sub } = supaOnAuthChange(() => {
+        supaGetSession().then(({ data }) => applyUser(data?.session?.user ?? null));
+      });
+      return () => { done = true; sub?.subscription?.unsubscribe?.(); };
+    }
+
     console.log("🚀 Initializing auth...");
-    
+
     setPersistence(auth, browserLocalPersistence).catch((error) => {
       console.error("❌ Error setting persistence:", error);
     });

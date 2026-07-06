@@ -6,11 +6,20 @@ import { doc, getDoc, getDocs, collection, query, where } from "firebase/firesto
 import { db, auth } from "../src/lib/firebase";
 import { DateTime } from "luxon";
 import { computeQuestionnaireStatus, getQuestionnaireWindowFromEnd } from "../src/utils/questionnaire";
+import { USE_SUPABASE, supabase } from "../src/lib/supabase";
+import {
+  getMyMembership as supaGetMyMembership,
+  getTeamQuestionnaire as supaGetTeamQuestionnaire,
+  getMyResponseForSession as supaGetMyResponseForSession,
+  submitResponse as supaSubmitResponse,
+} from "../src/lib/ctpApi";
 
 export default function StitchQuestionnaireScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { sessionId: sessionIdParam, trainingId, eventTitle, eventDate } = route.params || {};
+  // eslint-disable-next-line no-use-before-define
+
   const sessionId = trainingId || sessionIdParam;
 
   const handleGoBack = () => {
@@ -50,6 +59,56 @@ export default function StitchQuestionnaireScreen() {
 
   useEffect(() => {
     const checkAccess = async () => {
+      // ── Chemin Supabase (V2) ──────────────────────────────
+      if (USE_SUPABASE) {
+        try {
+          if (!sessionId) { setAccessDeniedReason("Paramètres manquants"); return; }
+          const m = await supaGetMyMembership();
+          const teamId = m?.team_id;
+          setTeamIdState(teamId);
+          if (!teamId) { setAccessDeniedReason("Aucune équipe associée"); return; }
+
+          const { data: sess } = await supabase.from("sessions")
+            .select("*").eq("id", sessionId).maybeSingle();
+          if (!sess) { setAccessDeniedReason("Entraînement non trouvé"); return; }
+
+          const endMillis = sess.end_utc ? new Date(sess.end_utc).getTime() : null;
+          const startMs = sess.start_utc ? new Date(sess.start_utc).getTime() : null;
+          setDisplayTitle(sess.title || eventTitle || "Training");
+          if (startMs && endMillis) {
+            const fmt = (ms) => new Date(ms).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+            setDisplayDate(`${fmt(startMs)} – ${fmt(endMillis)}`);
+            setTrainingDuration(Math.max(1, Math.round((endMillis - startMs) / 60000)));
+          }
+          setSessionType(sess.session_type || "conditioning");
+          setTrainingInfoForMessage({ endMillis, displayTz: "America/New_York", title: sess.title || "Training" });
+          if (!endMillis) { setAccessDeniedReason("L'entraînement n'a pas d'heure de fin définie"); return; }
+
+          const mine = await supaGetMyResponseForSession(sessionId);
+          const status = computeQuestionnaireStatus(endMillis, !!mine, DateTime.utc());
+          console.log("[QUESTIONNAIRE][SUPA] Access check", { sessionId, endMillis, hasCompleted: !!mine, status });
+
+          const tpl = await supaGetTeamQuestionnaire(teamId);
+          if (tpl?.questions?.length) {
+            setActiveQuestions(tpl.questions);
+            setUsedQuestionnaireId(tpl.id);
+          }
+
+          if (status === "completed") { setAccessDeniedReason("already_completed"); setIsAccessible(false); }
+          else if (status === "not_open_yet") { setAccessDeniedReason("not_open_yet"); setIsAccessible(false); }
+          else if (status === "closed") { setAccessDeniedReason("closed"); setIsAccessible(false); }
+          else if (status === "open") { setIsAccessible(true); setAccessDeniedReason(null); }
+          else { setAccessDeniedReason("unknown"); setIsAccessible(false); }
+        } catch (error) {
+          console.error("❌ [SUPA] Erreur vérification:", error);
+          setAccessDeniedReason("error");
+          setIsAccessible(false);
+        } finally {
+          setIsCheckingAccess(false);
+        }
+        return;
+      }
+
       try {
         if (!auth.currentUser || !sessionId) {
           setIsCheckingAccess(false);
@@ -298,6 +357,26 @@ export default function StitchQuestionnaireScreen() {
     setIsSubmitting(true);
 
     try {
+      // ── Chemin Supabase (V2) ──────────────────────────────
+      if (USE_SUPABASE) {
+        const isFrictionSupa = hasFriction === true;
+        await supaSubmitResponse({
+          teamId: teamIdState,
+          sessionId,
+          questionnaireId: usedQuestionnaireId,
+          metrics: { ...metrics },
+          hasFriction: isFrictionSupa,
+          frictionType: isFrictionSupa ? (Array.isArray(frictionType) ? frictionType.join(",") : frictionType) : null,
+          worryLevel: isFrictionSupa ? worryLevel : null,
+          isTest: isTestSession || false,
+        });
+        console.log("✅ [SUPA] Réponse sauvegardée dans Postgres — webhook déclenché");
+        if (Platform.OS === "web") setShowConfirmation(true);
+        else { Alert.alert("Merci !", "Réponse enregistrée."); handleReturnHome(); }
+        setIsSubmitting(false);
+        return;
+      }
+
       if (!auth.currentUser) {
         throw new Error("User not logged in");
       }

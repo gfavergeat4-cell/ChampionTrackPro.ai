@@ -4,6 +4,8 @@ import { View, Platform, Alert } from "react-native";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../services/firebaseConfig";
 import { useIsDesktop } from "../src/hooks/useIsDesktop";
+import { USE_SUPABASE } from "../src/lib/supabase";
+import { signIn as supaSignIn } from "../src/lib/ctpApi";
 
 export default function StitchLoginScreen() {
   const navigation = useNavigation();
@@ -19,6 +21,16 @@ export default function StitchLoginScreen() {
     }
     setLoading(true);
     try {
+      if (USE_SUPABASE) {
+        const { error } = await supaSignIn(formData.email.trim(), formData.password);
+        if (error) {
+          Alert.alert("Login failed", error.message || "Invalid email or password.");
+          setLoading(false);
+          return;
+        }
+        setLoading(false);
+        return; // AuthGate (Supabase) route par rôle
+      }
       await signInWithEmailAndPassword(auth, formData.email.trim(), formData.password);
     } catch (error) {
       let msg = "Login error";

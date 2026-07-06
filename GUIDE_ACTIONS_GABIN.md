@@ -55,14 +55,22 @@ curl -X POST https://TON_REF.supabase.co/functions/v1/morning-brief -H "Authoriz
 
 **Livrable : un appel LLM part et revient, coût loggé dans `llm_logs`.**
 
-## PHASE 4 — Migrer tes données Firestore (jour 3-4, ~2 h)
+## PHASE 4 — ~~Migration Firestore~~ ANNULÉE (base vide) → Seed + branchement auto
 
-- [ ] Firebase Console → Paramètres du projet → Comptes de service → **Générer une clé privée** → sauve `serviceAccount.json` dans `scripts/migration/` (⚠ jamais commité — ajoute-le à `.gitignore` d'abord)
-- [ ] `cd scripts/migration && npm install firebase-admin @supabase/supabase-js`
-- [ ] `set GOOGLE_APPLICATION_CREDENTIALS=serviceAccount.json && node export-firestore.mjs` → fichier `export/firestore-dump.json` + comptes affichés
-- [ ] Envoie-moi les comptes affichés (users/teams/trainings/responses) — je pilote avec toi le mapping des comptes utilisateurs (`userMap`) puis `transform-load.mjs`. C'est l'étape la plus délicate, on la fait ENSEMBLE en session.
+Firestore est vide : aucune migration nécessaire. L'app passe directement en Supabase-natif. À la place :
 
-**Livrable : tes données réelles dans Postgres, comptes source = comptes chargés.**
+- [ ] **4a. Seed initial** : `supabase db push` (migration 006 : organisation + équipe pilote code `CTP-PILOT` + questionnaire Basketball V3)
+- [ ] **4b. Webhook** (déclenche le calcul à chaque réponse) : Dashboard → **Database → Webhooks** → Create → table `responses`, événement `INSERT`, type **Supabase Edge Function** → `compute-metrics` → Create
+- [ ] **4c. Cron du Morning Brief** : Dashboard → **Database → Extensions** → active `pg_cron` et `pg_net`, puis SQL Editor :
+```sql
+select cron.schedule('morning-brief-daily', '0 11 * * *',  -- 11h UTC = 6h ou 7h heure US Est
+  $$select net.http_post(
+      'https://wiopzitygsgincztwquz.supabase.co/functions/v1/morning-brief',
+      '{"team_id":"b0000000-0000-4000-8000-000000000001"}'::jsonb,
+      headers := '{"Content-Type":"application/json","Authorization":"Bearer TA_CLE_ANON"}'::jsonb)$$);
+```
+
+**Livrable : à chaque réponse insérée → métriques calculées ; chaque matin → brief généré.**
 
 ## PHASE 5 — TON ingénierie (la seule chose que personne ne peut faire à ta place)
 
