@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
     readiness: m.readiness, ema_28: m.ema_28,
     deviation_pct: m.deviation_pct, zone: m.zone,
     workload_au: m.workload_au, acwr: m.acwr, data_days: m.data_days,
+    z_score: m.z_score ?? null, mean_28: m.mean_28 ?? null, sd_28: m.sd_28 ?? null,
   });
 
   // 2) RÈGLES — n'évalue QUE les règles activées par Gabin (enabled=true).

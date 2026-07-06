@@ -150,3 +150,39 @@
   }
 } as const;
 
+
+// ── DA v2 — « Stadium at night » (docs/03_DIRECTION_ARTISTIQUE.md) ──────────
+// Export ADDITIF : les écrans migrés Supabase consomment `da`, les anciens
+// écrans gardent `tokens` jusqu'à leur migration. Source de vérité : doc 03.
+export const da = {
+  bg: {
+    void: "#070B14",     // fond racine
+    court: "#0A0F1E",    // fond écrans
+  },
+  surface: {
+    s1: "#0E1528",       // cartes
+    s2: "#131C33",       // cartes surélevées, modales
+  },
+  line: {
+    dim: "rgba(0,212,255,0.14)",
+    focus: "rgba(0,212,255,0.35)",  // bordure de l'élément qui demande la décision
+  },
+  accent: {
+    cyan: "#00D4FF",     // action/focus — jamais décoratif
+    deep: "#0066FF",
+  },
+  state: {
+    green: "#00C853",    // zone GREEN — sacrée (langage Morin)
+    blue: "#2196F3",     // zone BLUE
+    yellow: "#FFB800",   // zone YELLOW
+    red: "#EF4444",      // flags priorité 1 uniquement
+    insufficient: "rgba(255,255,255,0.25)",
+  },
+  text: {
+    hi: "#FFFFFF",
+    mid: "#9CA3AF",
+    low: "rgba(255,255,255,0.45)",
+  },
+  radius: { card: 12, control: 8, pill: 999 },
+  glow: "0 0 30px rgba(0,180,255,0.25)", // UN seul élément lumineux par écran
+} as const;

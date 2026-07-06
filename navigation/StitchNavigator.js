@@ -8,6 +8,8 @@ import { doc, getDoc, getDocFromServer, setDoc, updateDoc, increment, serverTime
 import SplashScreen from "../src/components/SplashScreen";
 import { USE_SUPABASE } from "../src/lib/supabase";
 import { getSession as supaGetSession, onAuthChange as supaOnAuthChange, getMyMembership as supaGetMyMembership } from "../src/lib/ctpApi";
+import CoachHomeSupabase from "../src/screens/CoachHomeSupabase";
+import AthleteHomeSupabase from "../src/screens/AthleteHomeSupabase";
 import OnboardingNotifScreen from "../src/screens/OnboardingNotifScreen";
 
 // Import Stitch screens
@@ -63,7 +65,7 @@ function AthleteTabs() {
         tabBarStyle: { display: 'none' }, // Masque complètement la barre de navigation
       }}
     >
-      <AthleteTab.Screen name="Home" component={AthleteHome} />
+      <AthleteTab.Screen name="Home" component={USE_SUPABASE ? AthleteHomeSupabase : AthleteHome} />
       <AthleteTab.Screen name="Schedule" component={ScheduleScreenNewScreen} />
       <AthleteTab.Screen
         name="Profile"
@@ -238,7 +240,7 @@ function CoachTabs() {
     >
       <CoachTab.Screen
         name="Home"
-        component={CoachHomeScreen}
+        component={USE_SUPABASE ? CoachHomeSupabase : CoachHomeScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon name="Home" color={color} size={size} focused={focused} />

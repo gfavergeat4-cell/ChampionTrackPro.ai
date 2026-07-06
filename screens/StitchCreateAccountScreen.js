@@ -61,7 +61,11 @@ export default function StitchCreateAccountScreen() {
             role.toLowerCase() === "coach" ? "coach" : "athlete",
             formData.fullName.trim()
           );
-          console.log("[CREATE][SUPA] compte + adhésion OK — AuthGate route par rôle");
+          // Fix course : forcer un événement auth APRÈS l'adhésion pour que
+          // l'AuthGate relise le rôle maintenant que le membership existe.
+          const { supabase: supa } = await import("../src/lib/supabase");
+          await supa.auth.refreshSession();
+          console.log("[CREATE][SUPA] compte + adhésion OK — rôle relu après adhésion");
         } catch (err) {
           console.error("[CREATE][SUPA] error", err);
           Alert.alert("Erreur", err?.message || "Création de compte impossible");

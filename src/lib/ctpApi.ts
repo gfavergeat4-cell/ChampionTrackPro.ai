@@ -22,9 +22,24 @@ export async function getMyMembership() {
   const { data: { user } } = await db().auth.getUser();
   if (!user) return null;
   const { data } = await db().from("memberships")
-    .select("team_id, role, pseudonym, teams(name, sport)")
+    .select("team_id, role, pseudonym, teams(name, sport, ics_url, invite_code)")
     .eq("user_id", user.id).limit(1).maybeSingle();
   return data;
+}
+
+export async function setTeamCalendar(teamId: string, url: string) {
+  const { error } = await db().rpc("set_team_ics", { p_team: teamId, p_url: url });
+  if (error) throw error;
+  return { ok: true };
+}
+
+export async function triggerIcsSync() {
+  const { data: { session } } = await db().auth.getSession();
+  await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ics-sync`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session?.access_token}` },
+  });
+  return { ok: true };
 }
 
 export async function joinTeam(inviteCode: string, role: "athlete" | "coach", displayName?: string) {
@@ -121,9 +136,16 @@ export async function sendCoachFeedback(p: {
 }
 
 export async function getTeamMembers(teamId: string) {
-  const { data, error } = await db().from("memberships")
-    .select("user_id, role, jersey_number, pseudonym, profiles:user_id(display_name)")
+  const { data: mems, error } = await db().from("memberships")
+    .select("user_id, role, jersey_number, pseudonym")
     .eq("team_id", teamId);
   if (error) throw error;
-  return data ?? [];
+  const ids = (mems ?? []).map((m) => m.user_id);
+  const profMap: Record<string, any> = {};
+  if (ids.length) {
+    const { data: profs } = await db().from("profiles")
+      .select("user_id, display_name").in("user_id", ids);
+    for (const p of profs ?? []) profMap[p.user_id] = p;
+  }
+  return (mems ?? []).map((m) => ({ ...m, profiles: profMap[m.user_id] ?? null }));
 }

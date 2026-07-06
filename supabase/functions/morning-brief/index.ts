@@ -9,8 +9,7 @@ const supa = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-Deno.serve(async (req) => {
-  const { team_id } = await req.json();
+async function generateBrief(team_id: string) {
   const today = new Date().toISOString().slice(0, 10);
 
   // Derniers 28 j de métriques + flags du jour, pseudonymisés
@@ -49,6 +48,22 @@ Deno.serve(async (req) => {
     team_id, purpose: "morning_brief", model: MODELS.daily,
     tokens_in: tokensIn, tokens_out: tokensOut, cost_usd: cost,
   });
-  // TODO: push FCM au staff (réutiliser la logique notifications existante)
-  return new Response("ok");
+  // TODO (E2): notifier le staff quand le brief est prêt
+}
+
+Deno.serve(async (req) => {
+  let team_id: string | null = null;
+  try { team_id = (await req.json())?.team_id ?? null; } catch (_) { /* corps vide = toutes les équipes */ }
+  if (team_id) {
+    await generateBrief(team_id);
+    return new Response("ok");
+  }
+  // Multi-équipes : toutes les équipes ayant au moins un membre (doc 04 §3, event-driven)
+  const { data: teams } = await supa.from("teams").select("id");
+  let done = 0, failed = 0;
+  for (const t of teams ?? []) {
+    try { await generateBrief(t.id); done++; }
+    catch (e) { console.error("[BRIEF] team", t.id, String(e)); failed++; }
+  }
+  return Response.json({ ok: true, briefs: done, failed });
 });
