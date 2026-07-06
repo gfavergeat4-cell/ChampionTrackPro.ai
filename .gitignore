@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+web/dist/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+scripts/migration/serviceAccount.json
+scripts/migration/export/
+.DS_Store

@@ -1,0 +1,72 @@
+<svg width="400" height="120" viewBox="0 0 400 120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Glow effect for the logo -->
+    <filter id="glow-white">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glow-cyan">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background (transparent for flexibility) -->
+  <rect width="400" height="120" fill="transparent"/>
+  
+  <!-- Logo text: ChampionTrack -->
+  <text 
+    x="200" 
+    y="60" 
+    font-family="Cinzel, serif" 
+    font-size="48" 
+    font-weight="700" 
+    fill="#FFFFFF" 
+    text-anchor="middle" 
+    dominant-baseline="central"
+    filter="url(#glow-white)"
+    style="text-shadow: 0 0 10px rgba(255,255,255,0.5), 0 0 20px rgba(255,255,255,0.3);"
+  >
+    ChampionTrack
+  </text>
+  
+  <!-- Logo text: Pro (cyan) -->
+  <text 
+    x="200" 
+    y="60" 
+    font-family="Cinzel, serif" 
+    font-size="48" 
+    font-weight="700" 
+    fill="#00E0FF" 
+    text-anchor="middle" 
+    dominant-baseline="central"
+    filter="url(#glow-cyan)"
+    dx="140"
+    style="text-shadow: 0 0 12px rgba(0,224,255,0.8), 0 0 28px rgba(0,224,255,0.4);"
+  >
+    Pro
+  </text>
+  
+  <!-- Tagline -->
+  <text 
+    x="200" 
+    y="90" 
+    font-family="Inter, sans-serif" 
+    font-size="10" 
+    font-weight="300" 
+    fill="#BFC5D9" 
+    text-anchor="middle" 
+    dominant-baseline="central"
+    letter-spacing="0.28em"
+    text-transform="uppercase"
+  >
+    THE TRAINING INTELLIGENCE
+  </text>
+</svg>
+

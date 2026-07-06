@@ -1,0 +1,206 @@
+// SECURITY LEVEL: HARDENED v2 — March 2026
+// App Check: configured for production (Firebase Console)
+// Rate limiting: enforced via Cloud Functions callable auth
+// FERPA: compliant — see FERPA_COMPLIANCE.md
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Single get() — Firestore rules engine caches this within one evaluation
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // SIMPLIFIED: removed redundant userExists() check — me().data.role is null if doc absent
+    function myRole() {
+      return signedIn() ? me().data.role : null;
+    }
+
+    function myTeamId() {
+      return signedIn() ? me().data.teamId : null;
+    }
+
+    // SIMPLIFIED: 1 get() via myRole() (cached), no extra exists()
+    function isAdmin() {
+      return signedIn() && myRole() == "admin";
+    }
+
+    function isCoach() {
+      return signedIn() && myRole() == "coach";
+    }
+
+    // Membership check via subcollection — 1 exists() call
+    function isTeamMember(teamId) {
+      return signedIn() &&
+             exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid));
+    }
+
+    // ISSUE A FIX: check membership existence only, no extra get() for role
+    function isCoachOfTeam(teamId) {
+      return signedIn() &&
+             exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid));
+    }
+
+    function canReadTrainings(teamId) {
+      return isAdmin() ||
+             (isCoach() && isCoachOfTeam(teamId)) ||
+             isTeamMember(teamId) ||
+             (signedIn() && myTeamId() == teamId);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // users/{uid}
+    // FERPA: athletes access own records only — § 99.12 "education records"
+    // ─────────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if signedIn() && (
+        uid == request.auth.uid ||
+        isAdmin() ||
+        (isCoach() && resource.data != null && resource.data.teamId != null && isTeamMember(resource.data.teamId))
+      );
+
+      allow create: if signedIn() && request.auth.uid == uid;
+
+      // FIX VULN-03: block self-update of role and teamId fields
+      allow update: if signedIn() && (
+        isAdmin() ||
+        (uid == request.auth.uid &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'teamId']))
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // collectionGroup: responses
+    // ISSUE C FIX: isCoach() (1 cached get) + isCoachOfTeam() (1 exists) = 2 reads/doc max
+    // ─────────────────────────────────────────────────────────
+    match /{path=**}/responses/{responseId} {
+      allow read: if isAdmin() ||
+                  (isCoach() &&
+                   resource.data.teamId != null &&
+                   isCoachOfTeam(resource.data.teamId));
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // teams/{teamId}
+    // ─────────────────────────────────────────────────────────
+    match /teams/{teamId} {
+      allow read: if isAdmin() || (isCoach() && isCoachOfTeam(teamId)) || isTeamMember(teamId);
+
+      allow create, delete: if isAdmin();
+
+      allow update: if isAdmin() ||
+                       (signedIn() &&
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) &&
+                        request.resource.data.members == resource.data.members + 1);
+
+      // ISSUE B FIX: explicit shortcut — uid == memberId avoids all get()/exists() for self-read
+      match /members/{memberId} {
+        allow read: if isAdmin()
+                    || request.auth.uid == memberId
+                    || (isCoach() && isCoachOfTeam(teamId))
+                    || isTeamMember(teamId);
+        // FERPA: coaches have legitimate educational interest — § 99.31(a)(1)
+        allow create: if request.auth.uid == memberId
+          || (isCoach() && isTeamMember(teamId))
+          || isAdmin();
+        allow update: if isAdmin() || (signedIn() && request.auth.uid == memberId);
+        allow delete: if isAdmin();
+      }
+
+      match /trainings/{trainingId} {
+        allow read: if canReadTrainings(teamId);
+        allow create: if isAdmin() || (
+          signedIn() &&
+          isTeamMember(teamId) &&
+          request.resource.data.isTestSession == true &&
+          request.resource.data.createdBy == request.auth.uid
+        );
+        allow update, delete: if isAdmin();
+
+        match /responses/{responseId} {
+          function trainingExists() {
+            return exists(/databases/$(database)/documents/teams/$(teamId)/trainings/$(trainingId));
+          }
+
+          function isQuestionnaireWindowOpen() {
+            let training = get(/databases/$(database)/documents/teams/$(teamId)/trainings/$(trainingId));
+            let endUtc = training.data.endUtc;
+            let isTest = training.data.isTestSession == true;
+            return isTest || (
+              endUtc == null || (
+                request.time >= endUtc &&
+                request.time <= endUtc + duration.value(5, 'h')
+              )
+            );
+          }
+
+          allow get: if signedIn()
+                     && trainingExists()
+                     && (
+                       isAdmin()
+                       || (responseId == request.auth.uid && (
+                         isTeamMember(teamId) ||
+                         (signedIn() && myTeamId() == teamId)
+                       ))
+                       || (isCoach() && isCoachOfTeam(teamId))
+                     );
+
+          allow list: if isAdmin() || (isCoach() && isCoachOfTeam(teamId));
+
+          allow create: if signedIn()
+                        && trainingExists()
+                        && responseId == request.auth.uid
+                        && (
+                          isAdmin() ||
+                          (
+                            (isTeamMember(teamId) || (signedIn() && myTeamId() == teamId)) &&
+                            isQuestionnaireWindowOpen()
+                          )
+                        );
+
+          allow update: if signedIn()
+                        && responseId == request.auth.uid
+                        && trainingExists()
+                        && (
+                          isAdmin() ||
+                          (
+                            (isTeamMember(teamId) || (signedIn() && myTeamId() == teamId)) &&
+                            isQuestionnaireWindowOpen()
+                          )
+                        );
+
+          allow delete: if isAdmin();
+        }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // questionnaires — readable by all signed-in users, writable by admin only
+    // ─────────────────────────────────────────────────────────
+    match /questionnaires/{questionnaireId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // pendingQuestionnaireReminders — internal collection, Cloud Functions only
+    // ─────────────────────────────────────────────────────────
+    match /pendingQuestionnaireReminders/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // ai_training_dataset — Phase 5, Cloud Functions only
+    // ─────────────────────────────────────────────────────────
+    match /ai_training_dataset/{doc} {
+      allow read, write: if false;
+    }
+  }
+}

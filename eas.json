@@ -1,0 +1,9 @@
+{
+  "cli": { "appVersionSource": "remote" },
+  "build": {
+    "apk": {
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_NO_UPDATES": "1" }
+    }
+  }
+}
