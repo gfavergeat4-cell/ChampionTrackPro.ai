@@ -1,6 +1,6 @@
 // Sync ICS -> sessions. Événements simples + récurrents (RRULE DAILY/WEEKLY,
-// INTERVAL, BYDAY, UNTIL, COUNT, EXDATE). Zéro dépendance externe.
-// Limitation connue : TZID traité comme UTC (fix propre prévu avec E2).
+// INTERVAL, BYDAY, UNTIL, COUNT, EXDATE). TZID respecté via VTIMEZONE.
+// Zéro dépendance externe.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const supa = createClient(
@@ -16,6 +16,84 @@ function parseIcsDate(v: string): Date | null {
   return isNaN(dt.getTime()) ? null : dt;
 }
 
+// ── Timezone support (parsed from VTIMEZONE blocks) ─────────────────
+interface TzRule { offsetMin: number; month: number; wday: number; weekNum: number; atH: number; atM: number; }
+interface TzDef { standard: TzRule | null; daylight: TzRule | null; }
+
+const WDAYS: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+
+function parseOffset(s: string): number {
+  const sign = s.startsWith("-") ? -1 : 1;
+  return sign * (parseInt(s.slice(1, 3), 10) * 60 + parseInt(s.slice(3, 5), 10));
+}
+
+function parseTzBlocks(text: string): Map<string, TzDef> {
+  const map = new Map<string, TzDef>();
+  const unfolded = text.replace(/\r?\n[ \t]/g, "");
+  for (const raw of unfolded.split("BEGIN:VTIMEZONE").slice(1)) {
+    const block = raw.split("END:VTIMEZONE")[0];
+    const tzidM = block.match(/^TZID:(.*)$/m);
+    if (!tzidM) continue;
+    const tzid = tzidM[1].trim();
+    const def: TzDef = { standard: null, daylight: null };
+    for (const kind of ["STANDARD", "DAYLIGHT"] as const) {
+      const sub = block.match(new RegExp(`BEGIN:${kind}([\\s\\S]*?)END:${kind}`));
+      if (!sub) continue;
+      const b = sub[1];
+      const offsetTo = b.match(/^TZOFFSETTO:(.*)$/m)?.[1]?.trim();
+      if (!offsetTo) continue;
+      const dtm = b.match(/^DTSTART:.*?T(\d{2})(\d{2})/m);
+      const atH = dtm ? parseInt(dtm[1], 10) : 0;
+      const atM = dtm ? parseInt(dtm[2], 10) : 0;
+      let month = 1, wday = 0, weekNum = 1;
+      const rrule = b.match(/^RRULE:(.*)$/m)?.[1]?.trim();
+      if (rrule) {
+        const pp: Record<string, string> = {};
+        for (const p of rrule.split(";")) { const [k, v] = p.split("="); if (k) pp[k] = v; }
+        if (pp.BYMONTH) month = parseInt(pp.BYMONTH, 10);
+        if (pp.BYDAY) {
+          const bdm = pp.BYDAY.match(/(-?\d)?(\w{2})/);
+          if (bdm) { weekNum = bdm[1] ? parseInt(bdm[1], 10) : 1; wday = WDAYS[bdm[2]] ?? 0; }
+        }
+      }
+      const rule: TzRule = { offsetMin: parseOffset(offsetTo), month, wday, weekNum, atH, atM };
+      if (kind === "STANDARD") def.standard = rule; else def.daylight = rule;
+    }
+    map.set(tzid, def);
+  }
+  return map;
+}
+
+function nthWeekdayInMonth(year: number, month: number, wday: number, n: number): number {
+  if (n > 0) {
+    const first = new Date(Date.UTC(year, month - 1, 1));
+    let day = 1 + ((wday - first.getUTCDay() + 7) % 7);
+    return day + (n - 1) * 7;
+  }
+  const last = new Date(Date.UTC(year, month, 0));
+  let day = last.getUTCDate() - ((last.getUTCDay() - wday + 7) % 7);
+  if (n < -1) day += (n + 1) * 7;
+  return day;
+}
+
+function getOffsetMin(localAsUtc: Date, tz: TzDef): number {
+  if (!tz.daylight || !tz.standard) return (tz.standard || tz.daylight)!.offsetMin;
+  const year = localAsUtc.getUTCFullYear();
+  const dstDay = nthWeekdayInMonth(year, tz.daylight.month, tz.daylight.wday, tz.daylight.weekNum);
+  const stdDay = nthWeekdayInMonth(year, tz.standard.month, tz.standard.wday, tz.standard.weekNum);
+  const dstTrans = Date.UTC(year, tz.daylight.month - 1, dstDay, tz.daylight.atH, tz.daylight.atM);
+  const stdTrans = Date.UTC(year, tz.standard.month - 1, stdDay, tz.standard.atH, tz.standard.atM);
+  const t = localAsUtc.getTime();
+  if (dstTrans < stdTrans) return (t >= dstTrans && t < stdTrans) ? tz.daylight.offsetMin : tz.standard.offsetMin;
+  return (t >= dstTrans || t < stdTrans) ? tz.daylight.offsetMin : tz.standard.offsetMin;
+}
+
+function localToUtc(d: Date, tz: TzDef | null): Date {
+  if (!tz) return d;
+  return new Date(d.getTime() - getOffsetMin(d, tz) * 60000);
+}
+
+// ── Session type ────────────────────────────────────────────────
 function deriveSessionType(title: string, desc: string): string {
   const c = `${title} ${desc}`.toLowerCase();
   if (/\b(game|match|vs\.?|@)\b/.test(c)) return "game";
@@ -83,40 +161,66 @@ function expandRrule(rrule: string, dtstart: Date, wStart: number, wEnd: number)
 
 function parseIcs(text: string, wStart: number, wEnd: number) {
   const out: any[] = [];
+  const tzMap = parseTzBlocks(text);
+
+  // Calendar-level fallback timezone (Google X-WR-TIMEZONE)
+  const calTzId = text.match(/^X-WR-TIMEZONE:(.*)$/m)?.[1]?.trim();
+  const calTz = calTzId ? tzMap.get(calTzId) ?? null : null;
+
   const unfolded = text.replace(/\r?\n[ \t]/g, "");
   for (const raw of unfolded.split("BEGIN:VEVENT").slice(1)) {
     const body = raw.split("END:VEVENT")[0];
-    const get = (key: string) => {
-      const mm = body.match(new RegExp(`^${key}(?:;[^:\\n]*)?:(.*)$`, "m"));
-      return mm ? mm[1].trim() : "";
+
+    // Extract value + optional TZID from a property
+    const getP = (key: string): { value: string; tzid: string | null } => {
+      const mm = body.match(new RegExp(`^${key}(?:;([^:\\n]*))?:(.*)$`, "m"));
+      if (!mm) return { value: "", tzid: null };
+      const params = mm[1] || "";
+      const tzm = params.match(/TZID=([^;]+)/);
+      return { value: mm[2].trim(), tzid: tzm ? tzm[1] : null };
     };
+    const get = (key: string) => getP(key).value;
+
     const uid = get("UID");
-    const start = parseIcsDate(get("DTSTART"));
-    let end = parseIcsDate(get("DTEND"));
+    const sp = getP("DTSTART");
+    const ep = getP("DTEND");
+    const startLocal = parseIcsDate(sp.value);
+    let endLocal = parseIcsDate(ep.value);
     const title = get("SUMMARY") || "Training";
     const desc = get("DESCRIPTION");
     const cancelled = get("STATUS") === "CANCELLED";
-    if (!start) continue;
-    if (!end || end.getTime() <= start.getTime()) end = new Date(start.getTime() + 3600000);
-    const durationMs = end.getTime() - start.getTime();
+    if (!startLocal) continue;
+    if (!endLocal || endLocal.getTime() <= startLocal.getTime()) endLocal = new Date(startLocal.getTime() + 3600000);
+    const durationMs = endLocal.getTime() - startLocal.getTime();
+
+    // Resolve timezone: explicit TZID > calendar-level > null (UTC)
+    const isUtc = sp.value.endsWith("Z");
+    const tz = isUtc ? null : (sp.tzid ? tzMap.get(sp.tzid) ?? calTz : calTz);
 
     const rruleLine = body.match(/^RRULE:(.*)$/m)?.[1];
     if (rruleLine) {
+      // EXDATE in local time (same tz as DTSTART)
       const ex = new Set<number>();
       for (const exm of body.matchAll(/^EXDATE(?:;[^:\n]*)?:(.*)$/gm)) {
         for (const v of exm[1].split(",")) {
           const d = parseIcsDate(v.trim());
-          if (d) ex.add(d.getTime());
+          if (d) ex.add(d.getTime()); // compare in local space
         }
       }
-      for (const d of expandRrule(rruleLine, start, wStart, wEnd)) {
-        if (ex.has(d.getTime())) continue;
-        out.push({ uid: `${uid}_${d.getTime()}`, start: d, end: new Date(d.getTime() + durationMs), title, desc, cancelled });
+      // Expand in local time, then convert each occurrence to UTC
+      for (const dLocal of expandRrule(rruleLine, startLocal, wStart, wEnd)) {
+        if (ex.has(dLocal.getTime())) continue;
+        const dUtc = localToUtc(dLocal, tz);
+        const endUtc = localToUtc(new Date(dLocal.getTime() + durationMs), tz);
+        out.push({ uid: `${uid}_${dLocal.getTime()}`, start: dUtc, end: endUtc, title, desc, cancelled });
       }
       continue;
     }
-    if (start.getTime() < wStart || start.getTime() > wEnd) continue;
-    out.push({ uid, start, end, title, desc, cancelled });
+    // Single event: convert to UTC, check window
+    const startUtc = localToUtc(startLocal, tz);
+    const endUtc = localToUtc(endLocal, tz);
+    if (startUtc.getTime() < wStart || startUtc.getTime() > wEnd) continue;
+    out.push({ uid, start: startUtc, end: endUtc, title, desc, cancelled });
   }
   return out;
 }

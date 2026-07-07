@@ -72,6 +72,20 @@ export default function CoachHomeSupabase() {
     }
   };
 
+  const saveCalendar = async () => {
+    if (!teamId) return;
+    try {
+      setIcsSaved("saving");
+      await setTeamCalendar(teamId, icsUrl.trim());
+      await triggerIcsSync();
+      setIcsSaved("done");
+      load();
+    } catch (e) {
+      console.warn("[COACH][SUPA] set calendar failed:", (e as any)?.message);
+      setIcsSaved("error");
+    }
+  };
+
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: BG, alignItems: "center", justifyContent: "center" }}>
@@ -149,4 +163,50 @@ export default function CoachHomeSupabase() {
                   {r.zone === "INSUFFICIENT_DATA"
                     ? `building baseline (${r.data_days}d)`
                     : `${r.deviation_pct > 0 ? "+" : ""}${r.deviation_pct ?? 0}% vs baseline`}
-           
+                </Text>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+
+      <Text style={{ color: TXT, fontSize: 18, fontWeight: "700", marginTop: 28 }}>Team setup</Text>
+      <View style={{ backgroundColor: CARD, borderColor: BORDER, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 10 }}>
+        <Text style={{ color: MUTED, fontSize: 12 }}>Invite code for your athletes</Text>
+        <Text style={{ color: ACCENT, fontSize: 20, fontWeight: "700", letterSpacing: 2, marginTop: 2 }}>{inviteCode || "—"}</Text>
+
+        <Text style={{ color: MUTED, fontSize: 12, marginTop: 16 }}>
+          Training calendar — paste your Google Calendar secret iCal address, sessions sync automatically every 15 min
+        </Text>
+        <TextInput
+          value={icsUrl}
+          onChangeText={(v) => { setIcsUrl(v); setIcsSaved(null); }}
+          placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+          placeholderTextColor="rgba(255,255,255,0.25)"
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={{ height: 44, backgroundColor: "#0D1526", borderColor: BORDER, borderWidth: 1, borderRadius: 8,
+            color: TXT, paddingHorizontal: 12, fontSize: 13, marginTop: 8 }}
+        />
+        <Pressable
+          onPress={saveCalendar}
+          style={{ height: 42, borderRadius: 8, alignItems: "center", justifyContent: "center",
+            backgroundColor: ACCENT, marginTop: 10 }}
+        >
+          <Text style={{ color: "#04121F", fontSize: 13, fontWeight: "700" }}>
+            {icsSaved === "saving" ? "Syncing…" : "Save & sync calendar"}
+          </Text>
+        </Pressable>
+        {icsSaved === "done" ? (
+          <Text style={{ color: "#00C853", fontSize: 12, marginTop: 8, textAlign: "center" }}>Calendar connected — sessions are syncing.</Text>
+        ) : icsSaved === "error" ? (
+          <Text style={{ color: "#FFB800", fontSize: 12, marginTop: 8, textAlign: "center" }}>Could not save — check the URL (must start with https).</Text>
+        ) : null}
+      </View>
+
+      <Text style={{ color: MUTED, fontSize: 11, marginTop: 24, textAlign: "center" }}>
+        Signals are computed from each athlete's own 28-day baseline. Decisions stay yours.
+      </Text>
+    </ScrollView>
+  );
+}
