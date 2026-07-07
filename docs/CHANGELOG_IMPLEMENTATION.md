@@ -22,6 +22,13 @@ _(en cours — les entrées s'ajoutent au fil des modifications)_
 - `AthleteHomeSupabase` : le bouton Respond porte le glow unique de l'écran athlète.
 - Règle appliquée : « la lumière = la hiérarchie » — un seul élément glow par écran.
 
+### Bloc 5 — Fix ics-sync (doc 01 §5.1 — backlog E1)
+- **Diagnostic** : l'URL ICS Google Calendar fonctionne (200, `text/calendar`, 10 VEVENT récurrents DAILY). La cause du `upserted:0` précédent et du timeout ultérieur : **2 100 occurrences** (10 events × 210 jours) upsertées une par une (2 100 requêtes séquentielles → timeout edge function).
+- **Fix** : batch upsert par tranches de 200 lignes (11 requêtes au lieu de 2 100). Résultat : `upserted:2100` en ~5 s.
+- **Ajouts défensifs** : `AbortController` 15 s sur le fetch ICS (protection contre URL qui hang) ; mode `?dry_run=1` (retourne la liste des teams avec URL sans fetch, sans exposer l'URL complète) ; diagnostic riche dans la réponse (`is_ics`, `vevent_count`, `events_in_window`).
+- **Bug TZID toujours ouvert** : `DTSTART;TZID=Europe/Paris` traité comme UTC → décalage 1-2 h. Fix prévu avec E2.
+- ➜ Déployé. Cron `ics-sync-15min` à vérifier (doit exister dans pg_cron).
+
 ### Restes à implémenter (traçés, non faits — nécessitent session dédiée ou décision)
 - Relances 20/40/60 min + notifications (Bloc E2) — infra push à choisir (FCM vs VAPID vs email).
 - Création de séance in-app avec planned_load/objective (UI coach) — colonnes prêtes (008).

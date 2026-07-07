@@ -121,38 +121,81 @@ function parseIcs(text: string, wStart: number, wEnd: number) {
   return out;
 }
 
-Deno.serve(async () => {
-  const { data: teams } = await supa.from("teams")
-    .select("id, ics_url").not("ics_url", "is", null);
+Deno.serve(async (req: Request) => {
+  const reqUrl = new URL(req.url);
+  const dryRun = reqUrl.searchParams.get("dry_run") === "1";
+
+  const { data: teams, error: dbErr } = await supa.from("teams")
+    .select("id, name, ics_url").not("ics_url", "is", null);
+
+  if (dbErr) return Response.json({ ok: false, error: dbErr.message });
+
+  if (dryRun) {
+    return Response.json({
+      ok: true, dry_run: true, teams_found: teams?.length ?? 0,
+      teams: (teams ?? []).map((t) => ({
+        id: t.id, name: t.name,
+        url_host: t.ics_url ? new URL(t.ics_url).host : null,
+        url_length: t.ics_url?.length,
+      })),
+    });
+  }
+
   let total = 0, errors = 0, fetched = 0;
   const wStart = Date.now() - 30 * DAY;
   const wEnd = Date.now() + 180 * DAY;
+  const diag: Record<string, unknown>[] = [];
 
   for (const t of teams ?? []) {
+    const td: Record<string, unknown> = { team_id: t.id };
     try {
-      const res = await fetch(t.ics_url);
-      if (!res.ok) { console.error("[ICS] fetch", t.id, res.status); errors++; continue; }
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 15000);
+      let res: Response;
+      try {
+        res = await fetch(t.ics_url, { signal: ac.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+      td.http_status = res.status;
+      td.content_type = res.headers.get("content-type") ?? "unknown";
+      if (!res.ok) { errors++; td.error = `http_${res.status}`; diag.push(td); continue; }
       const text = await res.text();
       fetched += text.length;
+      td.bytes = text.length;
+      td.is_ics = text.trimStart().startsWith("BEGIN:VCALENDAR");
+
+      const veventCount = (text.match(/BEGIN:VEVENT/g) ?? []).length;
+      td.vevent_count = veventCount;
+
       const events = parseIcs(text, wStart, wEnd);
-      console.log("[ICS] team", t.id, "bytes:", text.length, "events retenus:", events.length);
-      for (const ev of events) {
-        const { error } = await supa.from("sessions").upsert({
-          team_id: t.id,
-          title: ev.title,
-          session_type: deriveSessionType(ev.title, ev.desc),
-          start_utc: ev.start.toISOString(),
-          end_utc: ev.end.toISOString(),
-          ics_uid: ev.uid || null,
-          cancelled: ev.cancelled,
-        }, { onConflict: "team_id,ics_uid,start_utc" });
-        if (error) { console.error("[ICS] upsert:", error.message); errors++; }
-        else total++;
+      td.events_in_window = events.length;
+      console.log("[ICS] team", t.id, "bytes:", text.length, "vevents:", veventCount, "in window:", events.length);
+
+      // Batch upsert (tranches de 200 pour rester sous les limites Postgres)
+      const BATCH = 200;
+      const rows = events.map((ev) => ({
+        team_id: t.id,
+        title: ev.title,
+        session_type: deriveSessionType(ev.title, ev.desc),
+        start_utc: ev.start.toISOString(),
+        end_utc: ev.end.toISOString(),
+        ics_uid: ev.uid || null,
+        cancelled: ev.cancelled,
+      }));
+      for (let i = 0; i < rows.length; i += BATCH) {
+        const chunk = rows.slice(i, i + BATCH);
+        const { error, count } = await supa.from("sessions")
+          .upsert(chunk, { onConflict: "team_id,ics_uid,start_utc", count: "exact" });
+        if (error) { console.error("[ICS] upsert batch:", error.message); errors++; }
+        else total += count ?? chunk.length;
       }
     } catch (e) {
       console.error("[ICS] team", t.id, String(e));
+      td.error = String(e);
       errors++;
     }
+    diag.push(td);
   }
-  return Response.json({ ok: true, upserted: total, errors, ics_bytes: fetched });
+  return Response.json({ ok: true, upserted: total, errors, ics_bytes: fetched, teams_found: teams?.length ?? 0, diag });
 });
