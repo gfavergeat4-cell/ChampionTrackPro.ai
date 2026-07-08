@@ -39,6 +39,20 @@ if (fs.existsSync(srcIcons)) {
   });
 }
 
+// ── Logos (utilisés par Login/Landing/Home) ──────────────────────────────────
+const srcLogo = path.join(process.cwd(), "public", "logo");
+const dstLogo = path.join(distRoot, "logo");
+if (fs.existsSync(srcLogo)) {
+  fs.mkdirSync(dstLogo, { recursive: true });
+  fs.readdirSync(srcLogo).forEach((f) => {
+    const s = path.join(srcLogo, f);
+    if (fs.statSync(s).isFile()) {
+      fs.copyFileSync(s, path.join(dstLogo, f));
+      console.log("OK Copied:", s, "->", path.join(dstLogo, f));
+    }
+  });
+}
+
 // ── Landing page — homepage swap ──────────────────────────────────────────────
 // Vercel serves static files before rewrites: web/dist/index.html always wins.
 // Fix: save Expo shell as app.html, install landing/index.html as the new index.html.
