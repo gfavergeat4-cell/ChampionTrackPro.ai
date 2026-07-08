@@ -135,6 +135,27 @@ export async function sendCoachFeedback(p: {
   return { ok: true };
 }
 
+// ── Push subscriptions (VAPID) ────────────────────────────────
+export async function savePushSubscription(sub: {
+  endpoint: string; p256dh: string; authKey: string;
+}) {
+  const { data: { user } } = await db().auth.getUser();
+  if (!user) throw new Error("not signed in");
+  const { error } = await db().from("push_subscriptions").upsert({
+    user_id: user.id, endpoint: sub.endpoint,
+    p256dh: sub.p256dh, auth_key: sub.authKey,
+  }, { onConflict: "user_id,endpoint" });
+  if (error) throw error;
+}
+
+export async function removePushSubscription(endpoint: string) {
+  const { data: { user } } = await db().auth.getUser();
+  if (!user) throw new Error("not signed in");
+  await db().from("push_subscriptions")
+    .delete().eq("user_id", user.id).eq("endpoint", endpoint);
+}
+
+// ── Team ─────────────────────────────────────────────────────
 export async function getTeamMembers(teamId: string) {
   const { data: mems, error } = await db().from("memberships")
     .select("user_id, role, jersey_number, pseudonym")

@@ -3,6 +3,8 @@ import { Platform } from "react-native";
 import { doc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 import { registerWebPushTokenForCurrentUser } from "../services/webNotifications";
+import { USE_SUPABASE } from "../lib/supabase";
+import { registerVapidPush } from "../services/vapidPush";
 
 type Platform_ = "android" | "ios-safari" | "ios-pwa";
 
@@ -57,7 +59,10 @@ export default function OnboardingNotifScreen({ onComplete }: Props) {
     const result = await Notification.requestPermission();
     setPermResult(result);
     if (result === "granted") {
-      try { await registerWebPushTokenForCurrentUser(); } catch (e) { /* silent */ }
+      try {
+        if (USE_SUPABASE) { await registerVapidPush(); }
+        else { await registerWebPushTokenForCurrentUser(); }
+      } catch (e) { /* silent */ }
       await markOnboardingComplete();
       onComplete();
     }

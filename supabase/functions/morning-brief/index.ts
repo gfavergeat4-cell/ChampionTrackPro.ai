@@ -3,6 +3,7 @@
 // exact envoyé au LLM (traçabilité totale) + le coût.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { narrate, BRIEF_SYSTEM, MODELS } from "../_shared/llm.ts";
+import { sendPush } from "../_shared/webpush.ts";
 
 const supa = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -48,7 +49,26 @@ async function generateBrief(team_id: string) {
     team_id, purpose: "morning_brief", model: MODELS.daily,
     tokens_in: tokensIn, tokens_out: tokensOut, cost_usd: cost,
   });
-  // TODO (E2): notifier le staff quand le brief est prêt
+  // E2: notifier le staff quand le brief est prêt
+  try {
+    const { data: staff } = await supa.from("memberships")
+      .select("user_id").eq("team_id", team_id)
+      .in("role", ["coach", "admin"]);
+    const staffIds = (staff ?? []).map((s) => s.user_id);
+    if (staffIds.length) {
+      const { data: subs } = await supa.from("push_subscriptions")
+        .select("endpoint, p256dh, auth_key")
+        .in("user_id", staffIds);
+      for (const sub of subs ?? []) {
+        try {
+          await sendPush(
+            { endpoint: sub.endpoint, p256dh: sub.p256dh, authKey: sub.auth_key },
+            { title: "Morning Brief ready", body: "Today's team readiness report is available.", url: "/" },
+          );
+        } catch (e) { console.error("[BRIEF] push staff:", String(e)); }
+      }
+    }
+  } catch (e) { console.error("[BRIEF] staff notify:", String(e)); }
 }
 
 Deno.serve(async (req) => {

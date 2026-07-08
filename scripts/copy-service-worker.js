@@ -64,7 +64,14 @@ if (fs.existsSync(srcLanding)) {
   console.warn("WARN public/landing/index.html not found — homepage unchanged.");
 }
 
-// Validation: SW doit utiliser importScripts (mode classique pour Android/Chrome)
+// ── VAPID SW (E2 — Web Push sans Firebase) ──────────────────────────────────
+const srcVapidSw = path.join(process.cwd(), "public", "ctp-sw.js");
+const dstVapidSw = path.join(distRoot, "ctp-sw.js");
+if (fs.existsSync(srcVapidSw)) {
+  copy(srcVapidSw, dstVapidSw);
+}
+
+// Validation: Firebase SW doit utiliser importScripts (mode classique pour Android/Chrome)
 const swTxt = fs.readFileSync(dstSw, "utf8");
 if (swTxt.includes("importScripts")) {
   console.log("OK SW uses importScripts (classic mode) - correct for background notifications.");

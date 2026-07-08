@@ -36,8 +36,51 @@ _(en cours — les entrées s'ajoutent au fil des modifications)_
 - **⚠ Calendrier de test irréaliste** : 10 « Training » quotidiens sans fin (07:30-22:30 Europe/Paris) → l'écran athlète affiche 10 sessions par jour. Gabin doit le remplacer par un calendrier réaliste type NCAA (practice lun/mer/ven + game samedi, avec UNTIL).
 - ➜ Déployé et vérifié en prod.
 
+## Session du 8 juillet 2026
+
+### Bloc 7 — E2 Notifications Web Push VAPID (doc 01 §5, doc 04 §3)
+
+**Décision fondateur** : Web Push natif VAPID — PAS de FCM. Les chemins Firebase restent intacts (Constitution art. 6).
+
+#### 7a. Infra VAPID
+- **Clés VAPID** générées (ECDSA P-256), stockées : `supabase secrets set VAPID_PRIVATE_KEY / VAPID_PUBLIC_KEY` ; clé publique dans `.env` (`EXPO_PUBLIC_VAPID_PUBLIC_KEY`).
+- **Migration 009** (`supabase/migrations/009_push_notifications.sql`) : table `push_subscriptions` (user_id, endpoint, p256dh, auth_key, RLS user_own) + table `pending_reminders` (team_id, session_id, user_id, remind_at, attempt 1/2/3, status pending/sent/responded/expired, service-role only).
+
+#### 7b. Module WebPush pure WebCrypto
+- `supabase/functions/_shared/webpush.ts` : VAPID JWT ES256 (RFC 8292) + ECE aes128gcm (RFC 8291), zéro dépendance externe, Web Crypto API uniquement. Fonctionne sur Deno Deploy.
+- **Crypto validé en prod** : insertion d'une souscription fake (ECDH P-256 valide, endpoint FCM bidon) → appel `notify` → `sent:0, failed:0, cleaned:1` (le pipeline VAPID JWT + ECDH + HKDF + AES-GCM s'exécute sans crash ; le cleanup auto supprime le endpoint 404).
+
+#### 7c. Edge function `notify`
+- `supabase/functions/notify/index.ts` : envoie des notifications push à une liste de `user_ids`. **Service-role only** : vérifie `role === "service_role"` dans le JWT (anon → 403). Nettoie les souscriptions mortes (404/410).
+
+#### 7d. Edge function `session-watcher`
+- `supabase/functions/session-watcher/index.ts` : cron 1 min (`session-watcher-1min` dans pg_cron).
+- **Phase A** : détecte les sessions terminées (end_utc entre now-2min et now, notified_at IS NULL), envoie la notif initiale aux athlètes, marque `notified_at`, crée 3 `pending_reminders` (+20/+40/+60 min).
+- **Phase B** : traite les reminders due, vérifie si l'athlète a répondu (table `responses`), envoie le push avec copywriting escaladé, marque `sent` ou `responded`.
+- **Phase C** : expire les reminders > 24h.
+- **Copywriting** : initial « Tell us — how did that session hit you? » → +20 « Still got 60 seconds? » → +40 « Don't let it go untracked » → +60 « Final reminder ».
+- **Test** : session insérée avec end_utc = now()-1min → `sessions_notified:1`, 3 pending_reminders créés (+20/+40/+60 min), notified_at rempli.
+
+#### 7e. Hook morning-brief → notification staff
+- `morning-brief/index.ts` : après upsert du brief, récupère les coaches/admins de l'équipe, envoie un push « Morning Brief ready » via `_shared/webpush.ts`.
+
+#### 7f. Client-side
+- `public/ctp-sw.js` : Service Worker VAPID, écoute `push` + `notificationclick`, deep link vers questionnaire. Zéro dépendance Firebase.
+- `src/services/vapidPush.ts` : enregistre le SW, souscrit via `pushManager.subscribe()`, stocke dans Supabase via `ctpApi.savePushSubscription()`.
+- `src/lib/ctpApi.ts` : ajout `savePushSubscription()` + `removePushSubscription()`.
+- `src/screens/OnboardingNotifScreen.tsx` : si `USE_SUPABASE`, appelle `registerVapidPush()` au lieu de `registerWebPushTokenForCurrentUser()`.
+- `scripts/copy-service-worker.js` : copie aussi `ctp-sw.js` dans `web/dist/`.
+
+#### 7g. Crons pg_cron
+- `session-watcher-1min` : `* * * * *` → appelle `session-watcher` avec Bearer service_role.
+- `morning-brief-daily` : `0 11 * * *` (inchangé).
+
+#### Action requise — Gabin
+1. Ouvrir l'app en athlète → cliquer « Enable Notifications » → vérifier `push_subscriptions` +1.
+2. Insérer une session test (`end_utc = now() - interval '1 min'`) → attendre 1 min (cron) → notification Chrome.
+3. Ne pas répondre → attendre 20 min → relance.
+
 ### Restes à implémenter (traçés, non faits — nécessitent session dédiée ou décision)
-- Relances 20/40/60 min + notifications (Bloc E2) — infra push à choisir (FCM vs VAPID vs email).
 - Création de séance in-app avec planned_load/objective (UI coach) — colonnes prêtes (008).
 - Court map SVG (doc 03 §3) + refonte questionnaire un-slider-à-la-fois (doc 03 §5) — avec Gabin, app lancée.
 - Landing 3D (doc 03 §3) — asset commercial.
