@@ -2,6 +2,7 @@ import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { Platform, View, StyleSheet as RNStyleSheet } from "react-native";
 import { onAuthStateChanged, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { auth, db } from "../services/firebaseConfig";
 import { doc, getDoc, getDocFromServer, setDoc, updateDoc, increment, serverTimestamp, onSnapshot } from "firebase/firestore";
@@ -11,6 +12,7 @@ import { getSession as supaGetSession, onAuthChange as supaOnAuthChange, getMyMe
 import CoachHomeSupabase from "../src/screens/CoachHomeSupabase";
 import AthleteHomeSupabase from "../src/screens/AthleteHomeSupabase";
 import OnboardingNotifScreen from "../src/screens/OnboardingNotifScreen";
+import CourtScene from "../src/components/CourtScene";
 
 // Import Stitch screens
 import LandingScreen from "../screens/StitchLandingScreen";
@@ -692,8 +694,18 @@ export default function StitchNavigator() {
   }, []);
 
   return (
-    <NavigationContainer ref={navigationRef}>
-      <AuthGate pendingDeepLink={pendingDeepLink} pendingJoinCode={pendingJoinCode} navigationRef={navigationRef} />
-    </NavigationContainer>
+    <View style={courtStyles.root}>
+      {Platform.OS === "web" && <CourtScene />}
+      <View style={courtStyles.content}>
+        <NavigationContainer ref={navigationRef}>
+          <AuthGate pendingDeepLink={pendingDeepLink} pendingJoinCode={pendingJoinCode} navigationRef={navigationRef} />
+        </NavigationContainer>
+      </View>
+    </View>
   );
 }
+
+const courtStyles = RNStyleSheet.create({
+  root: { flex: 1, backgroundColor: "#070B14" },
+  content: { flex: 1, position: "relative", zIndex: 1 },
+});
