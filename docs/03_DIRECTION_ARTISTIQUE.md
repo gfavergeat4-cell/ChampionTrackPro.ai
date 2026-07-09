@@ -28,8 +28,8 @@ L'app est une salle de basket la nuit, juste avant que les projecteurs s'allumen
 Règle : les 4 couleurs d'état sont sacrées (langage Morin) — aucun autre usage décoratif de vert/jaune/bleu/rouge nulle part.
 
 ### Typographie
-- **Display / identité** : Cinzel (déjà chargée) — logo et grands titres d'écran uniquement.
-- **Interface** : Rajdhani (déjà chargée) — sa géométrie athlétique est parfaite pour les scores ; chiffres en `tabular-nums`.
+- **Display / identité** : Marcellus — capitales romaines, luxe sportif gravé (révision du 8 juil. : Cinzel/Rajdhani retirées, jugées « geek/code vibe »).
+- **Interface & données** : Inter (300/400/500/600, tracking −1 %) ; grands chiffres en **Light 300** + `tabular-nums` — la finesse comme signe de qualité ; labels en petites capitales espacées.
 - Échelle : 34 (score héro) / 26 (titre écran) / 18 (section) / 15 (corps) / 12 (méta). Interlignage 1,5. Deux graisses max par écran.
 
 ### Espace, forme, profondeur
