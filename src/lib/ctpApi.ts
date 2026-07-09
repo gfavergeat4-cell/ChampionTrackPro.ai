@@ -106,6 +106,15 @@ export async function getMyResponseForSession(sessionId: string) {
 }
 
 // ── Coach ────────────────────────────────────────────────────
+export async function getMyMetricsToday() {
+  const { data: { user } } = await db().auth.getUser();
+  if (!user) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await db().from("daily_metrics")
+    .select("*").eq("user_id", user.id).eq("day", today).maybeSingle();
+  return data;
+}
+
 export async function getTeamMetrics(teamId: string, dayISO: string) {
   const { data, error } = await db().from("daily_metrics")
     .select("*").eq("team_id", teamId).eq("day", dayISO)

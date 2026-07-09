@@ -14,6 +14,8 @@ import {
   submitResponse as supaSubmitResponse,
 } from "../src/lib/ctpApi";
 
+const courtlightBg = "radial-gradient(1200px 800px at 50% -10%, #0D2545 0%, #070B14 60%)";
+
 export default function StitchQuestionnaireScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -525,6 +527,15 @@ export default function StitchQuestionnaireScreen() {
   // Submit is ready once Q7 (hasFriction) is answered
   const isSubmitReady = hasFriction !== null;
 
+  // ── Courtlight: one-slider-per-screen state (Supabase path only) ──
+  const [currentQ, setCurrentQ] = useState(0);
+  const totalSteps = effectiveQuestions.length + 1; // +1 for friction
+  const advanceQ = () => {
+    if (currentQ < effectiveQuestions.length) {
+      setCurrentQ(prev => prev + 1);
+    }
+  };
+
   // Inject CSS (always called, guards internally)
   React.useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -546,17 +557,18 @@ export default function StitchQuestionnaireScreen() {
         .slider-v3::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
-          width: 22px;
-          height: 22px;
-          background: #FFFFFF;
-          cursor: pointer;
+          width: 28px;
+          height: 28px;
+          background: radial-gradient(circle at 35% 30%, #9FE9FF, #00D4FF 55%, #0077CC);
+          cursor: grab;
           border-radius: 50%;
-          box-shadow: 0 0 8px rgba(0,212,255,0.6);
-          transition: transform 100ms ease-out, box-shadow 100ms ease-out;
+          box-shadow: 0 0 22px rgba(0,212,255,0.65), 0 4px 10px rgba(0,0,0,0.5);
+          transition: transform 120ms cubic-bezier(0.34,1.3,0.44,1);
         }
         .slider-v3:active::-webkit-slider-thumb {
-          transform: scale(1.15);
-          box-shadow: 0 0 16px rgba(0,212,255,0.9);
+          transform: scale(1.18);
+          cursor: grabbing;
+          box-shadow: 0 0 28px rgba(0,212,255,0.9), 0 4px 10px rgba(0,0,0,0.5);
         }
         .slider-v3::-moz-range-thumb {
           width: 22px;
@@ -635,7 +647,7 @@ export default function StitchQuestionnaireScreen() {
           <div style={{
             width: "100%",
             height: "100vh",
-            background: "linear-gradient(to bottom, #0B0F1A, #020409)",
+            background: courtlightBg,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -667,6 +679,183 @@ export default function StitchQuestionnaireScreen() {
         </MobileViewport>
       );
     }
+
+    // ═══════════ COURTLIGHT CHECK-IN (Supabase path, doc 06 §7.2) ═══════════
+    if (USE_SUPABASE) {
+      const currentQuestion = currentQ < effectiveQuestions.length ? effectiveQuestions[currentQ] : null;
+      const currentValue = currentQuestion ? (metrics[currentQuestion.metricKey || currentQuestion.key] ?? 50) : 50;
+      const isFrictionStep = currentQ >= effectiveQuestions.length;
+      const secsLeft = Math.max(10, 60 - currentQ * 10);
+
+      return (
+        <MobileViewport>
+          <div style={{
+            width: "100%", height: "100vh", background: courtlightBg,
+            fontFamily: "'Inter', -apple-system, sans-serif", letterSpacing: "-0.01em",
+            color: "#fff", display: "flex", flexDirection: "column",
+            maxWidth: "430px", margin: "0 auto", position: "relative", overflow: "hidden",
+          }}>
+            {/* Dots progress */}
+            <div style={{ display: "flex", gap: "6px", justifyContent: "center", padding: "28px 0 4px" }}>
+              {effectiveQuestions.map((_, i) => (
+                <span key={i} style={{
+                  width: i === currentQ ? 18 : 6, height: 6, borderRadius: 999,
+                  background: i < currentQ ? "#00D4FF" : i === currentQ ? "#00D4FF" : "rgba(255,255,255,0.18)",
+                  boxShadow: i <= currentQ ? "0 0 8px rgba(0,212,255,0.6)" : "none",
+                  transition: "all 0.2s cubic-bezier(0.22,1,0.36,1)",
+                }} />
+              ))}
+            </div>
+            <div style={{ textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.45)", marginBottom: 8 }}>
+              about <span style={{ color: "#00D4FF", fontWeight: 700 }}>{secsLeft}</span> seconds
+            </div>
+
+            {/* Confirmation overlay — "Locked in." */}
+            {showConfirmation && (
+              <div style={{
+                position: "absolute", inset: 0, background: "rgba(7,11,20,0.96)", backdropFilter: "blur(14px)",
+                display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, flexDirection: "column",
+              }}>
+                <div style={{ textAlign: "center", padding: "20px" }}>
+                  <div style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.01em" }}>Locked in.</div>
+                  <div style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4 }}>See you tomorrow.</div>
+                  <div style={{
+                    marginTop: 22, background: "rgba(17,26,45,0.92)", border: "1px solid rgba(0,212,255,0.10)",
+                    borderRadius: 16, padding: 16, textAlign: "left",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", color: "#9CA3AF" }}>
+                      YOUR 7-DAY TREND
+                    </div>
+                    <svg viewBox="0 0 340 60" style={{ width: "100%", marginTop: 8 }}>
+                      <polyline points="0,38 48,34 96,40 144,28 192,30 240,22 288,26 336,18"
+                        fill="none" stroke="#00D4FF" strokeWidth="2.5" strokeLinecap="round"
+                        style={{ filter: "drop-shadow(0 0 6px rgba(0,212,255,0.6))" }} />
+                    </svg>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", marginTop: 6 }}>
+                      Trending above your baseline 4 of the last 7 days.
+                    </div>
+                  </div>
+                  <button onClick={() => handleReturnHome()} style={{
+                    marginTop: 18, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(0,212,255,0.10)",
+                    borderRadius: 10, padding: "12px 24px", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  }}>Back home</button>
+                </div>
+              </div>
+            )}
+
+            {/* Question card OR friction step */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 18px" }}>
+              {!isFrictionStep && currentQuestion ? (
+                <div key={currentQ} style={{
+                  background: "rgba(19,28,51,0.66)", backdropFilter: "blur(14px)",
+                  border: "1px solid rgba(0,212,255,0.28)", borderRadius: 16, padding: "20px 18px",
+                  boxShadow: "0 16px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(160,220,255,0.14)",
+                  animation: "fadeIn 0.3s cubic-bezier(0.22,1,0.36,1)",
+                }}>
+                  <div style={{ fontSize: 11, letterSpacing: "0.12em", fontWeight: 500, color: "rgba(0,212,255,0.6)", textTransform: "uppercase" }}>
+                    {currentQuestion.category}
+                  </div>
+                  <p style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.4, margin: "10px 0 22px", color: "#fff" }}>
+                    {currentQuestion.question}
+                  </p>
+                  <input
+                    type="range" min="1" max="100" value={currentValue}
+                    onChange={(e) => handleMetricChange(currentQuestion.metricKey || currentQuestion.key, parseInt(e.target.value))}
+                    className="slider-v3"
+                    style={{ background: sliderFill(currentValue) }}
+                  />
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10 }}>
+                    <span style={{ fontSize: 12, color: "#9CA3AF", maxWidth: "46%" }}>{currentQuestion.leftAnchor}</span>
+                    <span style={{ fontSize: 12, color: "#9CA3AF", maxWidth: "46%", textAlign: "right" }}>{currentQuestion.rightAnchor}</span>
+                  </div>
+                  <button onClick={advanceQ} style={{
+                    width: "100%", marginTop: 18, padding: "14px 0", borderRadius: 10, border: "none",
+                    background: "linear-gradient(135deg, #00D4FF, #0066FF)", color: "#04121F",
+                    fontSize: 14, fontWeight: 700, cursor: "pointer", letterSpacing: "0.04em",
+                    boxShadow: "0 6px 20px rgba(0,120,255,0.35)",
+                  }}>Next</button>
+                </div>
+              ) : isFrictionStep && !showConfirmation ? (
+                <div style={{
+                  background: "rgba(19,28,51,0.66)", backdropFilter: "blur(14px)",
+                  border: "1px solid rgba(0,212,255,0.28)", borderRadius: 16, padding: "20px 18px",
+                  boxShadow: "0 16px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(160,220,255,0.14)",
+                  animation: "fadeIn 0.3s cubic-bezier(0.22,1,0.36,1)",
+                }}>
+                  <div style={{ fontSize: 11, letterSpacing: "0.12em", fontWeight: 500, color: "rgba(0,212,255,0.6)", textTransform: "uppercase" }}>
+                    FRICTION MATRIX
+                  </div>
+                  <p style={{ fontSize: 16, fontWeight: 500, lineHeight: 1.45, margin: "10px 0 16px", color: "#fff" }}>
+                    Is there any specific friction limiting your performance right now?
+                  </p>
+                  <div style={{ display: "flex", gap: 12 }}>
+                    <button onClick={() => setHasFriction(false)} style={{
+                      flex: 1, padding: "14px 0", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer",
+                      border: hasFriction === false ? "1.5px solid #00C853" : "1.5px solid rgba(0,200,83,0.22)",
+                      background: hasFriction === false ? "rgba(0,200,83,0.10)" : "rgba(0,200,83,0.03)",
+                      color: hasFriction === false ? "#00C853" : "rgba(0,200,83,0.50)",
+                    }}>NO</button>
+                    <button onClick={() => setHasFriction(true)} style={{
+                      flex: 1, padding: "14px 0", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer",
+                      border: hasFriction === true ? "1.5px solid #EF4444" : "1.5px solid rgba(239,68,68,0.22)",
+                      background: hasFriction === true ? "rgba(239,68,68,0.10)" : "rgba(239,68,68,0.03)",
+                      color: hasFriction === true ? "#EF4444" : "rgba(239,68,68,0.50)",
+                    }}>YES</button>
+                  </div>
+
+                  {hasFriction === true && (
+                    <div style={{ marginTop: 18, animation: "frictionReveal 0.2s ease-out both" }}>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: "#fff", margin: "0 0 10px" }}>What kind?</p>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                        {["Physical Soreness", "Academic / Life Stress", "Court Confusion", "Mental / Emotional"].map(type => {
+                          const sel = frictionType.includes(type);
+                          return <button key={type} onClick={() => toggleFrictionType(type)} style={{
+                            padding: "8px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: "pointer",
+                            border: sel ? "1.5px solid #00D4FF" : "1.5px solid rgba(0,212,255,0.20)",
+                            background: sel ? "rgba(0,212,255,0.12)" : "transparent",
+                            color: sel ? "#fff" : "rgba(255,255,255,0.45)",
+                          }}>{type}</button>;
+                        })}
+                      </div>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: "#fff", margin: "0 0 10px" }}>How much is it affecting your game?</p>
+                      <input type="range" min="1" max="100" value={frictionImpact}
+                        onChange={(e) => setFrictionImpact(parseInt(e.target.value))}
+                        className="slider-v3" style={{ background: sliderFill(frictionImpact) }} />
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, marginBottom: 14 }}>
+                        <span style={{ fontSize: 11, color: "#9CA3AF" }}>Barely noticeable</span>
+                        <span style={{ fontSize: 11, color: "#9CA3AF" }}>Severely limiting</span>
+                      </div>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: "#fff", margin: "0 0 10px" }}>How much is it messing with your head?</p>
+                      <input type="range" min="1" max="100" value={worryLevel}
+                        onChange={(e) => setWorryLevel(parseInt(e.target.value))}
+                        className="slider-v3" style={{ background: sliderFill(worryLevel) }} />
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                        <span style={{ fontSize: 11, color: "#9CA3AF" }}>Not worried</span>
+                        <span style={{ fontSize: 11, color: "#9CA3AF" }}>Highly concerned</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {isSubmitReady && (
+                    <button onClick={handleSubmit} disabled={isSubmitting} style={{
+                      width: "100%", marginTop: 18, padding: "14px 0", borderRadius: 10, border: "none",
+                      background: "linear-gradient(135deg, #00D4FF, #0066FF)", color: "#04121F",
+                      fontSize: 14, fontWeight: 700, cursor: isSubmitting ? "not-allowed" : "pointer",
+                      opacity: isSubmitting ? 0.5 : 1, boxShadow: "0 6px 20px rgba(0,120,255,0.35)",
+                    }}>{isSubmitting ? "Sending..." : "Submit"}</button>
+                  )}
+                  {submitError && <div style={{ color: "#FF7A93", fontSize: 12, textAlign: "center", marginTop: 10 }}>{submitError}</div>}
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.20)", textAlign: "center", marginTop: 12, lineHeight: 1.5 }}>
+                    Your responses are used solely by your coaching staff. FERPA rights apply.
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </MobileViewport>
+      );
+    }
+    // ═══════════ END COURTLIGHT CHECK-IN ═══════════
 
     return (
       <MobileViewport>
