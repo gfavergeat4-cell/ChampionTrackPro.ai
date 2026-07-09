@@ -92,7 +92,7 @@ export default function OnboardingNotifScreen({ onComplete }: Props) {
     root: {
       position: "fixed",
       inset: 0,
-      background: "#0A0F1E",
+      background: "radial-gradient(1200px 800px at 50% -10%, #0D2545 0%, #070B14 60%)",
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -115,15 +115,15 @@ export default function OnboardingNotifScreen({ onComplete }: Props) {
       animation: pulsing ? "ctp-pulse-notif 2s ease-in-out infinite" : "none",
     },
     title: {
-      fontFamily: "'Bebas Neue', sans-serif",
-      fontSize: "36px",
+      fontFamily: "'Marcellus', serif",
+      fontSize: "28px",
       color: "#FFFFFF",
       letterSpacing: "3px",
       textAlign: "center",
       marginBottom: "12px",
     },
     subtitle: {
-      fontFamily: "'DM Sans', 'Inter', sans-serif",
+      fontFamily: "'Inter', -apple-system, sans-serif",
       fontSize: "16px",
       color: "rgba(255,255,255,0.6)",
       textAlign: "center",
@@ -238,8 +238,7 @@ export default function OnboardingNotifScreen({ onComplete }: Props) {
       </div>
       <div style={s.title}>NEVER MISS A SESSION</div>
       <div style={s.subtitle}>
-        Get instant alerts when your coach needs your data.{"\n"}
-        Takes less than 60 seconds to respond.
+        Your coach adapts training to how you feel — 60 seconds after each session.
       </div>
       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", textAlign: "center", maxWidth: 300, lineHeight: 1.5, marginBottom: 16 }}>
         Your data is used solely for performance tracking by your coaching staff. You may request deletion at any time. FERPA rights apply.

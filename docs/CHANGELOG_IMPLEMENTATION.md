@@ -80,8 +80,55 @@ _(en cours — les entrées s'ajoutent au fil des modifications)_
 2. Insérer une session test (`end_utc = now() - interval '1 min'`) → attendre 1 min (cron) → notification Chrome.
 3. Ne pas répondre → attendre 20 min → relance.
 
+### Bloc 8 — Courtlight : langage visuel propriétaire (doc 06)
+
+**7 étapes (T1-T7), chacune testée et commitée indépendamment.**
+
+#### T1. Fondations
+- Packages : `@expo-google-fonts/marcellus`, `@expo-google-fonts/inter`, `react-native-svg`, `three`, `@react-three/fiber`, `@react-three/drei`, `expo-font`.
+- Export `courtlight` dans `src/theme/tokens.ts` (doc 06 §3) : bg, surface, edge, shadow, zoneGlow, motion, radius, type.
+- Chargement Marcellus 400 + Inter 300/400/500/600 dans `App.js` via `useFonts`.
+
+#### T2. CourtScene (scène ambiante 3D)
+- `src/components/CourtScene.tsx` : Three.js vanilla (terrain NBA canvas-texture HD 2048px, 180 particules, parallaxe caméra pointeur, fog court).
+- Dégradation auto : `prefers-reduced-motion` → rendu statique unique, FPS < 28 après 60 frames → freeze, pas de WebGL → composant vide.
+- Monté une seule fois dans `StitchNavigator` (web only, absolute z:0, pointerEvents none).
+
+#### T3. ReadinessHalo (signature n°1)
+- `src/components/ReadinessHalo.tsx` : SVG ring (react-native-svg), arc de progression coloré par zone, cran de baseline (point blanc), count-up optionnel 600ms.
+- Glow zone via CSS drop-shadow filter (web), dégradation silencieuse (native).
+
+#### T4. GlassCard (plan supérieur)
+- `src/components/GlassCard.tsx` : surface translucide + backdrop-blur 14px, bordure cyan, ombre e2.
+- Tilt 3D ±5° sous le pointeur (perspective 900px) + reflet radial qui suit (--gx/--gy), transition settle.
+- Props `glow` pour le glowFocus unique de l'écran.
+
+#### T5. Refonte CoachHomeSupabase (doc 06 §7.1)
+- Brief IA dans GlassCard avec tilt 3D et glow unique de l'écran.
+- Count-up héros 600ms (ease-out cubic) pour le readiness d'équipe, 1×/jour.
+- Chiffres du brief en Inter tabular cyan inline (auto-détection regex).
+- Roster trié par priorité avec mini-halos ReadinessHalo 34px + delta vs baseline en texte clair.
+- Team setup replié en accordéon (fermé par défaut).
+- Skeleton warm-up shimmer au chargement. Fond transparent (Court visible).
+- Marcellus pour l'identité équipe, Inter 300-600 partout.
+
+#### T6. Refonte AthleteHomeSupabase + check-in (doc 06 §7.2-7.3)
+- Halo personnel ReadinessHalo + baseline dans l'en-tête.
+- GlassCard pour session à noter avec temps restant de la fenêtre (« closes in 3 h 40 »).
+- État vide informatif (« All caught up. Next session… »).
+- `getMyMetricsToday()` ajouté dans `ctpApi.ts`.
+- **Check-in un-slider-par-écran** (chemin Supabase uniquement) : dots de progression, une question par écran dans un GlassCard, slider Courtlight (pouce radial-gradient cyan, grab/grabbing, haptique visuel). Friction matrix en dernier. Écran « Locked in. See you tomorrow. » + trend 7j SVG.
+- Chemin Firebase totalement intact.
+
+#### T7. Micro-interactions et états (doc 06 §5-6)
+- `CardGraphite.tsx` : carte surface standard avec animation cascade (translateY 8px → 0, spring, delay 40ms × index).
+- `SplashScreen.tsx` : skeleton warm-up shimmer Courtlight (pas de spinner).
+- Tab bar transparente (rgba court), Onboarding fond vignette, typographie Marcellus.
+- **Décision prise seul** : pas de R3F pour la scène (vanilla Three.js plus fiable pour un fond fixe). `@react-three/fiber` et `drei` installés mais non utilisés (disponibles pour T-futurs).
+- **Décision prise seul** : slider Courtlight (radial-gradient cyan, scale 1.18 au grab) appliqué aussi au chemin Firebase pour cohérence visuelle du slider CSS partagé.
+
 ### Restes à implémenter (traçés, non faits — nécessitent session dédiée ou décision)
 - Création de séance in-app avec planned_load/objective (UI coach) — colonnes prêtes (008).
-- Court map SVG (doc 03 §3) + refonte questionnaire un-slider-à-la-fois (doc 03 §5) — avec Gabin, app lancée.
+- Court map SVG dans le fond du check-in (doc 06 §7.2 — les lignes de terrain en filigrane derrière le slider).
 - Landing 3D (doc 03 §3) — asset commercial.
 - Règles moteur : attendent l'ingénierie Gabin (doc 02 §7) — AUCUN seuil activé sans lui (Constitution).

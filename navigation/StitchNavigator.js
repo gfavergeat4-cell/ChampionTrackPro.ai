@@ -167,7 +167,7 @@ function AdminTabs() {
         tabBarStyle: route.name === 'AdminHome'
           ? { display: 'none' }
           : {
-              backgroundColor: '#0E1528',
+              backgroundColor: 'rgba(7,11,20,0.92)',
               borderTopColor: '#2B2E36',
               borderTopWidth: 1,
               height: 80,
@@ -229,7 +229,7 @@ function CoachTabs() {
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: {
-          backgroundColor: '#0E1528',
+          backgroundColor: 'rgba(7,11,20,0.92)',
           borderTopColor: '#2B2E36',
           borderTopWidth: 1,
           height: 80,
