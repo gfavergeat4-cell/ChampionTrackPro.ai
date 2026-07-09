@@ -26,6 +26,7 @@ export default {
       orientation: "portrait",
       // Les fichiers dans public/ sont automatiquement copiés dans le build web
     },
+    plugins: ["expo-font"],
     extra: {
       eas: { projectId: "265f2c6f-c23c-46ba-b6ae-43fdf41bb497" }
     }

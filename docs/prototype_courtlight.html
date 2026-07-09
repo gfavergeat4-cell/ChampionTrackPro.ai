@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ChampionTrackPro — Courtlight prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --court:#070B14; --card:rgba(17,26,45,.92); --glass:rgba(19,28,51,.66);
+  --hair:rgba(0,212,255,.10); --cyan:#00D4FF; --txt:#fff; --mid:#9CA3AF; --low:rgba(255,255,255,.45);
+  --green:#00C853; --blue:#2196F3; --yellow:#FFB800;
+  --spring:cubic-bezier(.34,1.3,.44,1); --settle:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:radial-gradient(1200px 800px at 50% -10%,#0D2545 0%,var(--court) 60%) fixed,var(--court);
+  color:var(--txt);font-family:'Inter',-apple-system,'Segoe UI',sans-serif;letter-spacing:-0.01em;min-height:100vh;overflow-x:hidden}
+.court-lines{position:fixed;inset:0;pointer-events:none;opacity:.04;z-index:0}
+.wrap{position:relative;z-index:1;max-width:430px;margin:0 auto;padding:18px 18px 90px}
+.brand{font-family:'Marcellus',serif;letter-spacing:.34em;font-size:12px;color:var(--mid);text-align:center;margin:6px 0 2px}
+.brand b{color:var(--cyan);font-weight:600}
+.tabs{position:fixed;bottom:0;left:0;right:0;z-index:9;display:flex;justify-content:center;gap:8px;
+  padding:12px;background:linear-gradient(transparent,rgba(7,11,20,.92) 40%)}
+.tab{font-family:'Inter';font-weight:500;font-size:13px;letter-spacing:.02em;color:var(--mid);
+  background:var(--card);border:1px solid var(--hair);border-radius:999px;padding:10px 18px;cursor:pointer;
+  transition:all .14s var(--spring);box-shadow:0 8px 24px rgba(0,0,0,.45), inset 0 1px 0 rgba(160,220,255,.10)}
+.tab:active{transform:scale(.97)}
+.tab.on{color:#04121F;background:var(--cyan);border-color:transparent;box-shadow:0 0 28px rgba(0,180,255,.35)}
+.view{display:none;animation:rise .3s var(--settle)}
+.view.on{display:block}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card{background:var(--card);border:1px solid var(--hair);border-radius:16px;padding:16px;margin-top:12px;
+  box-shadow:0 8px 24px rgba(0,0,0,.45), inset 0 1px 0 rgba(160,220,255,.10);
+  animation:rise .34s var(--settle) backwards}
+.card:nth-of-type(2){animation-delay:.04s}.card:nth-of-type(3){animation-delay:.08s}.card:nth-of-type(4){animation-delay:.12s}
+.glass{background:var(--glass);backdrop-filter:blur(14px);border:1px solid rgba(0,212,255,.28);
+  box-shadow:0 16px 48px rgba(0,0,0,.55), 0 0 40px rgba(0,180,255,.20), inset 0 1px 0 rgba(160,220,255,.14)}
+.h1{font-size:24px;font-weight:500;letter-spacing:-0.02em}.meta{font-size:13px;color:var(--mid)}
+.sect{font-size:15px;font-weight:600;margin:22px 0 4px;letter-spacing:.02em}
+.pill{display:inline-block;font-size:12px;font-weight:600;color:var(--cyan);border:1px solid var(--hair);
+  border-radius:999px;padding:2px 10px;vertical-align:2px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.btn{font-family:'Inter';font-weight:600;font-size:13px;letter-spacing:.04em;border:none;cursor:pointer;
+  border-radius:10px;padding:12px 18px;transition:transform .14s var(--spring),box-shadow .14s;color:#04121F;
+  background:linear-gradient(135deg,#00D4FF,#0066FF);box-shadow:0 6px 20px rgba(0,120,255,.35)}
+.btn:active{transform:scale(.97);box-shadow:0 2px 8px rgba(0,120,255,.35)}
+.btn.ghost{background:rgba(255,255,255,.06);color:var(--txt);border:1px solid var(--hair);box-shadow:none;font-weight:600}
+.btn.ghost.sel-g{border-color:var(--green);color:var(--green);background:rgba(0,200,83,.14)}
+.btn.ghost.sel-y{border-color:var(--yellow);color:var(--yellow);background:rgba(255,184,0,.14)}
+.halo{position:relative;display:grid;place-items:center}
+.halo svg{transform:rotate(-90deg)}
+.halo .val{position:absolute;font-weight:400;font-variant-numeric:tabular-nums}
+.zoneG{filter:drop-shadow(0 0 8px rgba(0,200,83,.7))}
+.zoneB{filter:drop-shadow(0 0 8px rgba(33,150,243,.7))}
+.zoneY{filter:drop-shadow(0 0 8px rgba(255,184,0,.7))}
+.num{font-variant-numeric:tabular-nums;font-weight:300;letter-spacing:-0.02em}
+.brief-num{color:var(--cyan);font-weight:700}
+.fade-mid{color:var(--mid)}.small{font-size:12px}.tiny{font-size:11px;color:var(--low)}
+.slider-zone{margin:26px 0 8px}
+.rail{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:999px;outline:none;
+  background:linear-gradient(90deg,#00D4FF var(--fill,50%),rgba(255,255,255,.10) var(--fill,50%))}
+.rail::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;cursor:grab;
+  background:radial-gradient(circle at 35% 30%,#9FE9FF,#00D4FF 55%,#0077CC);
+  box-shadow:0 0 22px rgba(0,212,255,.65),0 4px 10px rgba(0,0,0,.5);transition:transform .12s var(--spring)}
+.rail:active::-webkit-slider-thumb{transform:scale(1.18);cursor:grabbing}
+.anchors{display:flex;justify-content:space-between;font-size:12px;color:var(--mid);margin-top:10px}
+.dots{display:flex;gap:6px;justify-content:center;margin:10px 0 2px}
+.dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.18);transition:all .2s var(--settle)}
+.dot.done{background:var(--cyan);box-shadow:0 0 8px rgba(0,212,255,.6)}
+.dot.cur{width:18px;border-radius:999px;background:var(--cyan)}
+.success{text-align:center;padding:34px 10px}
+.success .halo{margin:0 auto 14px}
+@keyframes pulse1{0%{filter:drop-shadow(0 0 6px rgba(0,200,83,.4))}45%{filter:drop-shadow(0 0 22px rgba(0,200,83,.9))}100%{filter:drop-shadow(0 0 10px rgba(0,200,83,.6))}}
+.pulse{animation:pulse1 1.1s var(--settle) 1}
+.skel{position:relative;overflow:hidden;background:rgba(255,255,255,.05);border-radius:8px;height:14px}
+.skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(160,220,255,.12),transparent);animation:shim 1.2s var(--settle) 2}
+@keyframes shim{to{transform:translateX(100%)}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+
+.tilt{transform-style:preserve-3d;will-change:transform;transition:transform .18s var(--settle)}
+.tilt .glare{position:absolute;inset:0;border-radius:16px;pointer-events:none;
+  background:radial-gradient(400px 200px at var(--gx,50%) var(--gy,0%),rgba(160,220,255,.10),transparent 60%)}
+#gl{position:fixed;inset:0;z-index:0;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<svg class="court-lines" style="display:none" viewBox="0 0 430 900" preserveAspectRatio="xMidYMin slice">
+  <g fill="none" stroke="#00D4FF" stroke-width="1.5">
+    <circle cx="215" cy="450" r="120"/>
+    <path d="M65 0 v170 a150 150 0 0 0 300 0 V0"/>
+    <path d="M65 900 v-170 a150 150 0 0 1 300 0 V900"/>
+    <line x1="0" y1="450" x2="430" y2="450"/>
+  </g>
+</svg>
+
+<div class="wrap">
+  <div class="brand">CHAMPION<b>TRACK</b>PRO</div>
+  <div style="text-align:center" class="tiny">courtlight · living prototype</div>
+
+  <!-- ══════════ VUE COACH ══════════ -->
+  <section id="v-coach" class="view on">
+    <div style="margin-top:16px" class="meta">PILOT TEAM · Wed, Jul 8</div>
+    <div class="row">
+      <h1 class="h1">Morning brief</h1>
+      <span class="pill">check-ins 11/12</span>
+    </div>
+
+    <div class="card glass tilt"><div class="glare"></div>
+      <div class="row" style="align-items:flex-start">
+        <div style="flex:1">
+          <div class="meta small" style="letter-spacing:.16em;font-weight:500;font-size:11px;text-transform:uppercase">TEAM READINESS</div>
+          <div class="num" id="teamScore" style="font-size:48px;font-weight:300;line-height:1">0</div>
+          <div class="tiny">vs team baseline <span class="brief-num">+3</span></div>
+        </div>
+        <div class="halo" id="heroHalo"></div>
+      </div>
+      <p style="font-size:14px;line-height:1.65;margin-top:10px">
+        Squad is absorbing load as planned — <span class="brief-num">9</span> green.
+        <b>#7 Maya</b> is <span class="brief-num">−18%</span> under her baseline for a
+        <span class="brief-num">2nd</span> straight day (readiness <span class="brief-num">54</span>) —
+        worth a conversation before contact work. <b>#23 Jo</b> spiked
+        <span class="brief-num">+21%</span> after yesterday's double — monitor first block.
+        One athlete hasn't checked in (reminder sent <span class="brief-num">7:40</span>).
+      </p>
+      <div class="row" style="margin-top:14px;gap:10px">
+        <button class="btn ghost" style="flex:1" onclick="fb(this,'g')">Useful</button>
+        <button class="btn ghost" style="flex:1" onclick="fb(this,'y')">Noise</button>
+      </div>
+      <div class="tiny" id="fbnote" style="text-align:center;margin-top:8px;opacity:0;transition:opacity .3s">
+        Feedback saved — this trains what matters to you.</div>
+    </div>
+
+    <div class="sect">Readiness today</div>
+    <div class="card" style="padding:8px 16px" id="roster"></div>
+    <div class="tiny" style="text-align:center;margin-top:16px">
+      Signals come from each athlete's own 28-day baseline. Decisions stay yours.</div>
+  </section>
+
+  <!-- ══════════ VUE ATHLÈTE ══════════ -->
+  <section id="v-ath" class="view">
+    <div style="margin-top:16px" class="meta">Hey Maya</div>
+    <div class="row">
+      <h1 class="h1">Your day</h1>
+      <div class="halo" id="myHalo"></div>
+    </div>
+
+    <div class="card glass tilt"><div class="glare"></div>
+      <div class="meta small" style="letter-spacing:.16em;font-weight:500;font-size:11px;text-transform:uppercase">SESSION TO RATE</div>
+      <div class="row" style="margin-top:6px">
+        <div>
+          <div style="font-size:17px;font-weight:700">Practice</div>
+          <div class="meta small">ended 14 min ago · window closes in <span class="brief-num">4 h 46</span></div>
+        </div>
+        <button class="btn" onclick="go('v-quiz')">Respond · 60 s</button>
+      </div>
+    </div>
+
+    <div class="sect">Next sessions</div>
+    <div class="card">
+      <div class="row"><div><b>Practice</b><div class="meta small">Wed · 3:00 – 5:00 pm</div></div><span class="tiny">practice</span></div>
+      <hr style="border:none;border-top:1px solid var(--hair);margin:12px 0">
+      <div class="row"><div><b>Game vs State</b><div class="meta small">Sat · 7:00 – 9:00 pm</div></div><span class="tiny" style="color:var(--yellow)">game</span></div>
+    </div>
+
+    <div class="sect">Loading state (démo)</div>
+    <div class="card"><div class="skel" style="width:70%"></div><div class="skel" style="width:45%;margin-top:10px"></div></div>
+  </section>
+
+  <!-- ══════════ VUE CHECK-IN ══════════ -->
+  <section id="v-quiz" class="view">
+    <div style="margin-top:26px" class="dots" id="dots"></div>
+    <div class="tiny" style="text-align:center">about <span class="brief-num" id="secsLeft">60</span> seconds</div>
+
+    <div id="quiz">
+      <div class="card glass" style="margin-top:26px">
+        <div class="meta small" style="letter-spacing:.12em" id="qcat">PHYSICAL ENGINE</div>
+        <div style="font-size:18px;font-weight:600;line-height:1.4;margin-top:6px" id="qtext"></div>
+        <div class="slider-zone">
+          <input type="range" min="1" max="100" value="50" class="rail" id="rail"
+                 oninput="this.style.setProperty('--fill',this.value+'%')">
+        </div>
+        <div class="anchors"><span id="aL"></span><span id="aR"></span></div>
+        <button class="btn" style="width:100%;margin-top:18px" onclick="nextQ()">Next</button>
+      </div>
+    </div>
+
+    <div id="done" style="display:none" class="success">
+      <div class="halo" id="doneHalo"></div>
+      <div style="font-size:22px;font-weight:500;letter-spacing:-0.01em">Locked in.</div>
+      <div class="meta" style="margin-top:4px">See you tomorrow.</div>
+      <div class="card" style="text-align:left;margin-top:22px">
+        <div class="meta small" style="letter-spacing:.16em;font-weight:500;font-size:11px;text-transform:uppercase">YOUR 7-DAY TREND</div>
+        <svg viewBox="0 0 340 60" style="width:100%;margin-top:8px">
+          <polyline points="0,38 48,34 96,40 144,28 192,30 240,22 288,26 336,18"
+            fill="none" stroke="#00D4FF" stroke-width="2.5" stroke-linecap="round"
+            style="filter:drop-shadow(0 0 6px rgba(0,212,255,.6))"/>
+        </svg>
+        <div class="tiny">Trending above your baseline 4 of the last 7 days.</div>
+      </div>
+      <button class="btn ghost" style="margin-top:18px" onclick="resetQuiz();go('v-ath')">Back home</button>
+    </div>
+  </section>
+</div>
+
+<nav class="tabs">
+  <button class="tab on" data-v="v-coach" onclick="go('v-coach',this)">Coach</button>
+  <button class="tab" data-v="v-ath" onclick="go('v-ath',this)">Athlete</button>
+  <button class="tab" data-v="v-quiz" onclick="go('v-quiz',this)">Check-in</button>
+</nav>
+
+<script>
+// ── Readiness Halo : anneau + lueur de zone + CRAN DE BASELINE (signature n°1) ──
+function halo(el, score, zone, size, baselinePct){
+  const r=(size/2)-5, c=2*Math.PI*r, off=c*(1-score/100);
+  const col={G:"#00C853",B:"#2196F3",Y:"#FFB800",N:"rgba(255,255,255,.25)"}[zone];
+  const bAng=(baselinePct/100)*2*Math.PI, bx=size/2+r*Math.cos(bAng), by=size/2+r*Math.sin(bAng);
+  el.innerHTML=`<svg width="${size}" height="${size}" class="zone${zone}">
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="rgba(255,255,255,.10)" stroke-width="4" fill="none"/>
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="${col}" stroke-width="4" fill="none"
+      stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
+      style="transition:stroke-dashoffset .6s var(--settle)"/>
+    <circle cx="${bx}" cy="${by}" r="3.4" fill="#fff" opacity=".95"/>
+  </svg><span class="val" style="font-size:${size*.30}px">${score}</span>`;
+}
+
+// ── Roster coach : un score jamais seul (signature n°2) ──
+const players=[
+  ["#7 Maya",54,"B",72,"−18% vs her norm · 2nd day"],
+  ["#23 Jo",88,"Y",67,"+21% spike after double"],
+  ["#12 Ava",76,"G",74,"steady · +3 vs norm"],
+  ["#3 Kim",71,"G",70,"steady · +1 vs norm"],
+  ["#9 Lena",69,"G",72,"−4% · normal range"],
+  ["#31 Sam",null,"N",50,"no check-in · reminded 7:40"]];
+document.getElementById("roster").innerHTML=players.map(([n,s,z,b,d])=>`
+  <div class="row" style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="halo" data-h="${s??0},${z},34,${b}"></span>
+      <div><b style="font-size:15px">${n}</b><div class="tiny">${d}</div></div>
+    </div>
+    <span class="num" style="font-size:18px;font-weight:700">${s??"—"}</span>
+  </div>`).join("");
+document.querySelectorAll("[data-h]").forEach(el=>{const[a,z,s,b]=el.dataset.h.split(",");halo(el,+a,z,+s,+b)});
+
+// ── Héros coach : count-up 600 ms, une fois par jour (signature n°5) ──
+const hero=document.getElementById("heroHalo");halo(hero,0,"G",76,71);
+let t0=null;requestAnimationFrame(function cnt(ts){t0??=ts;const p=Math.min((ts-t0)/600,1);
+  const e=1-Math.pow(1-p,3), v=Math.round(74*e);
+  document.getElementById("teamScore").textContent=v;halo(hero,v,"G",76,71);
+  if(p<1)requestAnimationFrame(cnt)});
+halo(document.getElementById("myHalo"),72,"G",56,69);
+
+// ── Navigation ──
+function go(id,btn){document.querySelectorAll(".view").forEach(v=>v.classList.toggle("on",v.id===id));
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.v===id));
+  window.scrollTo({top:0})}
+function fb(btn,k){btn.classList.add(k==="g"?"sel-g":"sel-y");
+  btn.parentElement.querySelectorAll("button").forEach(b=>b.disabled=true);
+  document.getElementById("fbnote").style.opacity=1}
+
+// ── Check-in : 6 questions, un slider par écran ──
+const Q=[["PHYSICAL ENGINE","How loaded is your tank walking into today's session?","Running on empty","Fully charged"],
+ ["PHYSICAL ENGINE","How gassed were your lungs and transitions yesterday?","Barely felt it","Completely gassed"],
+ ["PHYSICAL ENGINE","How bouncy do your legs feel right now?","Legs are bricks","Springy and explosive"],
+ ["TECHNICAL EXECUTION","How dialed-in does your handle and shot feel today?","Completely off","Silky smooth"],
+ ["TACTICAL EXECUTION","How sharp are you at reading the floor today?","Mentally foggy","Seeing everything"],
+ ["PSYCHOSOCIAL","How connected do you feel to the team's energy?","Disconnected","Locked in together"]];
+let qi=0;
+function paintQ(){const[cat,txt,l,r]=Q[qi];
+  document.getElementById("qcat").textContent=cat;
+  document.getElementById("qtext").textContent=txt;
+  document.getElementById("aL").textContent=l;document.getElementById("aR").textContent=r;
+  const rail=document.getElementById("rail");rail.value=50;rail.style.setProperty("--fill","50%");
+  document.getElementById("secsLeft").textContent=Math.max(10,60-qi*10);
+  document.getElementById("dots").innerHTML=Q.map((_,i)=>
+    `<span class="dot ${i<qi?"done":i===qi?"cur":""}"></span>`).join("")}
+function nextQ(){if(qi<Q.length-1){qi++;paintQ()}else{
+  document.getElementById("quiz").style.display="none";
+  const d=document.getElementById("done");d.style.display="block";
+  const h=document.getElementById("doneHalo");halo(h,78,"G",88,69);h.classList.add("pulse")}}
+function resetQuiz(){qi=0;paintQ();
+  document.getElementById("quiz").style.display="block";
+  document.getElementById("done").style.display="none"}
+paintQ();
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv = document.getElementById('gl');
+  const rd = new THREE.WebGLRenderer({canvas:cv, alpha:true, antialias:true});
+  rd.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const sc = new THREE.Scene();
+  sc.fog = new THREE.Fog(0x070B14, 10, 34);
+  const cam = new THREE.PerspectiveCamera(55, 1, .1, 60);
+  cam.position.set(0, 3.0, 10.5);
+
+  // Le sol : un VRAI terrain (proportions NBA 94x50 ft) dessiné en HD sur canvas
+  function courtTexture(){
+    const W=2048, ox=64, sPx=(W-2*ox)/94, H=Math.round(50*sPx+2*ox);
+    const c=document.createElement('canvas'); c.width=W; c.height=H;
+    const g=c.getContext('2d');
+    // parquet : lattes sombres avec variation subtile
+    g.fillStyle='#0A1322'; g.fillRect(0,0,W,H);
+    for(let x=0;x<W;x+=54){
+      g.fillStyle=`rgba(140,180,230,${0.015+Math.random()*0.02})`;
+      g.fillRect(x,0,27,H);
+    }
+    // reflet zénithal au centre (la salle est éclairée d'en haut)
+    const rg=g.createRadialGradient(W/2,H/2,60,W/2,H/2,W*0.55);
+    rg.addColorStop(0,'rgba(80,150,220,0.10)'); rg.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle=rg; g.fillRect(0,0,W,H);
+
+    const X=ft=>ox+ft*sPx, Y=ft=>ox+ft*sPx;
+    const line=(w,a)=>{g.strokeStyle=`rgba(0,212,255,${a})`; g.lineWidth=w;
+      g.shadowColor='rgba(0,212,255,0.9)'; g.shadowBlur=16;};
+    // périmètre + médiane + cercle central
+    line(7,.85); g.strokeRect(X(0),Y(0),94*sPx,50*sPx);
+    g.beginPath(); g.moveTo(X(47),Y(0)); g.lineTo(X(47),Y(50)); g.stroke();
+    g.beginPath(); g.arc(X(47),Y(25),6*sPx,0,7); g.stroke();
+    // chaque moitié : raquette, cercle LF, arc 3 pts, panier
+    for(const side of [0,1]){
+      const bx = side? X(94-5.25) : X(5.25), dir = side? -1 : 1;
+      line(6,.7);
+      // raquette (16 ft de large, 19 ft de fond) + cercle lancer franc
+      const kx = side? X(94-19) : X(0), kw = 19*sPx*(side?1:1);
+      g.strokeRect(side? X(94-19):X(0), Y(17), 19*sPx, 16*sPx);
+      g.beginPath(); g.arc(side? X(94-19):X(19), Y(25), 6*sPx, 0, 7); g.stroke();
+      // arc 3 points (23.75 ft depuis le panier)
+      g.beginPath();
+      g.arc(bx, Y(25), 23.75*sPx, dir===1? -1.19 : Math.PI-1.19, dir===1? 1.19 : Math.PI+1.19);
+      g.stroke();
+      // panier : cercle chaud discret + planche
+      g.strokeStyle='rgba(255,140,60,0.75)'; g.shadowColor='rgba(255,140,60,0.8)';
+      g.lineWidth=5; g.beginPath(); g.arc(bx, Y(25), .75*sPx, 0, 7); g.stroke();
+      g.beginPath(); g.moveTo(side? X(94-4):X(4), Y(22)); g.lineTo(side? X(94-4):X(4), Y(28)); g.stroke();
+    }
+    const t=new THREE.CanvasTexture(c); t.anisotropy=8; return t;
+  }
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(28.2, 15),
+    new THREE.MeshBasicMaterial({map:courtTexture()}));
+  floor.rotation.x = -Math.PI/2; floor.position.y = -2.4; sc.add(floor);
+  // reflet du terrain sous lui-même (illusion de sol ciré)
+  const refl = floor.clone(); refl.material = floor.material.clone();
+  refl.material.transparent = true; refl.material.opacity = .18;
+  refl.rotation.x = Math.PI/2; refl.position.y = -2.46; sc.add(refl);
+
+  // Poussière de lumière — la salle vit
+  const N = 220, pos = new Float32Array(N*3), spd = [];
+  for(let i=0;i<N;i++){pos[i*3]=(Math.random()-.5)*24; pos[i*3+1]=Math.random()*8-2; pos[i*3+2]=(Math.random()-.5)*22;
+    spd.push(.0008+Math.random()*.0022)}
+  const pts = new THREE.Points(
+    new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos,3)),
+    new THREE.PointsMaterial({color:0x7FD8FF, size:.035, transparent:true, opacity:.55}));
+  sc.add(pts);
+
+  let mx=0, my=0;
+  addEventListener('pointermove', e=>{mx=(e.clientX/innerWidth-.5); my=(e.clientY/innerHeight-.5)});
+  function size(){const w=innerWidth,h=innerHeight;rd.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+  addEventListener('resize', size); size();
+
+  let f=0;
+  function loop(){
+    f++;
+    const p = pts.geometry.attributes.position.array;
+    for(let i=0;i<N;i++){p[i*3+1]+=spd[i]; if(p[i*3+1]>6)p[i*3+1]=-2}
+    pts.geometry.attributes.position.needsUpdate = true;
+    cam.position.x += (mx*1.4 - cam.position.x)*.04;    // parallaxe caméra
+    cam.position.y += (2.2 - my*1.0 - cam.position.y)*.04;
+    cam.lookAt(0,0,0);
+    rd.render(sc, cam);
+    if(!reduced) requestAnimationFrame(loop);
+  }
+  loop(); if(reduced) rd.render(sc,cam);
+})();
+
+// Matière 3D : les cartes de focus s'inclinent sous le curseur
+document.querySelectorAll('.tilt').forEach(el=>{
+  el.addEventListener('pointermove', e=>{
+    const r = el.getBoundingClientRect();
+    const x = (e.clientX-r.left)/r.width, y = (e.clientY-r.top)/r.height;
+    el.style.transform = `perspective(900px) rotateX(${(0.5-y)*5}deg) rotateY(${(x-0.5)*5}deg) translateZ(6px)`;
+    el.style.setProperty('--gx', (x*100)+'%'); el.style.setProperty('--gy', (y*100)+'%');
+  });
+  el.addEventListener('pointerleave', ()=>{ el.style.transform='perspective(900px)' });
+});
+</script>
+</body>
+</html>

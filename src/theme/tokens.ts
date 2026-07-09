@@ -186,3 +186,64 @@ export const da = {
   radius: { card: 12, control: 8, pill: 999 },
   glow: "0 0 30px rgba(0,180,255,0.25)", // UN seul élément lumineux par écran
 } as const;
+
+
+// ── Courtlight v3 — langage visuel propriétaire (docs/06_REDESIGN_COURTLIGHT.md) ──
+// Étend `da` vers une identité complète. Fond #070B14, vignette radiale,
+// trois plans de matière (Court/Cartes/Verre), physique spring & settle.
+// Typographie : Marcellus (marque) + Inter 300-600 (UI). Source : doc 06 §3.
+export const courtlight = {
+  bg: {
+    court: "#070B14",
+    vignette: "radial-gradient(1200px 800px at 50% -10%, #0D2545 0%, #070B14 60%)",
+  },
+  surface: {
+    card: "rgba(17,26,45,0.92)",   // cartes graphite
+    glass: "rgba(19,28,51,0.66)",  // verre de focus — translucide, halo cyan
+  },
+  edge: {
+    rim: "inset 0 1px 0 rgba(160,220,255,0.10)",  // liseré zénithal (1 px haut)
+    hair: "1px solid rgba(0,212,255,0.10)",        // séparateur subtil
+  },
+  shadow: {
+    e1: "0 8px 24px rgba(0,0,0,0.45)",              // carte
+    e2: "0 16px 48px rgba(0,0,0,0.55)",              // verre de focus
+    glowFocus: "0 0 40px rgba(0,180,255,0.22)",      // UN par écran
+  },
+  zoneGlow: {
+    GREEN:  "0 0 18px rgba(0,200,83,0.45)",
+    BLUE:   "0 0 18px rgba(33,150,243,0.45)",
+    YELLOW: "0 0 18px rgba(255,184,0,0.50)",
+    NONE:   "none",
+  },
+  zone: {
+    GREEN:  "#00C853",
+    BLUE:   "#2196F3",
+    YELLOW: "#FFB800",
+  },
+  text: {
+    hi:  "#FFFFFF",
+    mid: "#9CA3AF",
+    low: "rgba(255,255,255,0.45)",
+  },
+  accent: {
+    cyan: "#00D4FF",
+    deep: "#0066FF",
+  },
+  motion: {
+    spring: "cubic-bezier(0.34, 1.3, 0.44, 1)",
+    settle: "cubic-bezier(0.22, 1, 0.36, 1)",
+    fast: 140,   // ms
+    base: 260,
+    hero: 600,   // count-up matinal — max absolu 700
+  },
+  radius: { card: 16, control: 10, halo: 999 },
+  type: {
+    brand: "'Marcellus', serif",                       // identité, capitales
+    ui: "'Inter', -apple-system, sans-serif",          // interface
+    mono: "'JetBrains Mono', monospace",
+    weights: { light: "300", regular: "400", medium: "500", semibold: "600" } as const,
+    // Grands chiffres : Inter Light 300 + fontVariantNumeric: 'tabular-nums'
+    // Labels : petites capitales 11 px, letterSpacing +16 % (+0.16em)
+  },
+} as const;
