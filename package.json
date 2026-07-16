@@ -12,7 +12,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "web:start": "expo start --web",
-    "web:build": "echo '[BUILD] Node version:' && node -v && echo '[BUILD] Commit hash:' && git rev-parse HEAD && expo export --platform web --output-dir web/dist && node scripts/copy-service-worker.js && node scripts/inject-metadata.js && node scripts/verify-build.js",
+    "web:build": "echo '[BUILD] Node version:' && node -v && expo export --platform web --output-dir web/dist && node scripts/copy-service-worker.js && node scripts/inject-metadata.js && node scripts/verify-build.js",
     "web:build:meta": "npm run web:build && node scripts/inject-metadata.js",
     "og:generate": "node scripts/generate-og-image.js",
     "android:bundle": "npx expo export --platform android --output-dir android-bundle --clear"
