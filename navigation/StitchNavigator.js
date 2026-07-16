@@ -11,6 +11,8 @@ import { USE_SUPABASE } from "../src/lib/supabase";
 import { getSession as supaGetSession, onAuthChange as supaOnAuthChange, getMyMembership as supaGetMyMembership } from "../src/lib/ctpApi";
 import CoachHomeSupabase from "../src/screens/CoachHomeSupabase";
 import AthleteHomeSupabase from "../src/screens/AthleteHomeSupabase";
+import ScheduleScreenSupabase from "../src/screens/ScheduleScreenSupabase";
+import ProfileScreenSupabase from "../src/screens/ProfileScreenSupabase";
 import OnboardingNotifScreen from "../src/screens/OnboardingNotifScreen";
 import CourtScene from "../src/components/CourtScene";
 
@@ -68,10 +70,10 @@ function AthleteTabs() {
       }}
     >
       <AthleteTab.Screen name="Home" component={USE_SUPABASE ? AthleteHomeSupabase : AthleteHome} />
-      <AthleteTab.Screen name="Schedule" component={ScheduleScreenNewScreen} />
+      <AthleteTab.Screen name="Schedule" component={USE_SUPABASE ? ScheduleScreenSupabase : ScheduleScreenNewScreen} />
       <AthleteTab.Screen
         name="Profile"
-        component={ProfileScreen}
+        component={USE_SUPABASE ? ProfileScreenSupabase : ProfileScreen}
         initialParams={{ role: "athlete" }}
       />
     </AthleteTab.Navigator>
@@ -206,9 +208,9 @@ function AdminTabs() {
           ),
         }}
       />
-      <AdminTab.Screen 
-        name="Profile" 
-        component={ProfileScreen}
+      <AdminTab.Screen
+        name="Profile"
+        component={USE_SUPABASE ? ProfileScreenSupabase : ProfileScreen}
         initialParams={{ role: "admin" }}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
@@ -279,7 +281,7 @@ function CoachTabs() {
       />
       <CoachTab.Screen
         name="Profile"
-        component={CoachProfileScreen}
+        component={USE_SUPABASE ? ProfileScreenSupabase : CoachProfileScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon name="Profile" color={color} size={size} focused={focused} />

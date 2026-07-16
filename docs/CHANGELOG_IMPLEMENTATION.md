@@ -1,6 +1,34 @@
 # CHANGELOG — Implémentation des documents fondateurs
 **Mis à jour en temps réel à chaque modification. Réf : docs 01-04 + Constitution.**
 
+## Session du 16 juillet 2026 — PARITÉ P1-P4
+
+### P1 — Notifications : parité timing/texte (doc 07)
+- `session-watcher/index.ts` : remplacé les 3 relances +20/+40/+60 min par 2 relances calquées sur l'ancien `functions/index.js`.
+  - Relance 1 : +3 h, titre « Still got 60 seconds? ⏱ », body « Your coach needs your data to make tomorrow better for everyone. » (EXACT ancien).
+  - Relance 2 : +6 h, titre « Final reminder 🔒 », body « Don't let your session go untracked. » (EXACT ancien).
+  - Initial T+0 : emoji ⚡ ajouté au titre pour parité complète.
+- `pending_reminders` : 2 attempts au lieu de 3 par athlète.
+
+### P2 — Console Admin portée sur ctpApi + Courtlight
+- `AdminHomeScreen.tsx` : réécrit — Firebase → ctpApi (`getAdminTeams`, `signOut`, `createTeam`). Grille d'équipes, inline create team, Courtlight.
+- `AdminTeamScreen.tsx` : réécrit — Firebase → ctpApi (`getTeamInfo`, `setTeamCalendar`, `triggerIcsSync`). Access Codes + Calendar Sync, Courtlight.
+- `AdminTeamDetailScreen.tsx` : réécrit — Firebase → ctpApi (`getTeamInfo`, `getTeamMembers`, `removeMember`, `updateTeamInfo`). Drawer settings + PerformanceDashboard intégré.
+- `PerformanceDashboard.tsx` : réécrit — Firebase `responses` collectionGroup → ctpApi `getTeamMetricsRange` + `getTeamMembers`. Morning Brief + Analytics (recharts). Courtlight.
+- `create-team/index.ts` (edge function) : nouvelle fonction service-role pour création d'équipe + auto-membership admin.
+- `ctpApi.ts` : ajouté `getAdminTeams`, `getTeamInfo`, `updateTeamInfo`, `removeMember`, `createTeam`, `getTeamMetricsRange`, `getMyProfile`, `updateMyProfile`.
+
+### P3 — Schedule + Profile + Logout Supabase
+- `ScheduleScreenSupabase.tsx` : nouveau — Day/Week/Month avec `listSessions`, `getMyResponseForSession`. Courtlight.
+- `ProfileScreenSupabase.tsx` : nouveau — profil éditable + notification status + **signOut Supabase fonctionnel** (via `CommonActions.reset`).
+- `StitchNavigator.js` : AthleteTabs/AdminTabs/CoachTabs utilisent Schedule/Profile Supabase quand `USE_SUPABASE` actif.
+
+### P4 — Vérification parité
+- `docs/07_CONTRAT_DE_PARITE.md` : matrice mise à jour — toutes les lignes ✓ (sauf questionnaire = 🔒 gelé).
+- Build web (`npx expo export --platform web`) : OK, 1271 modules, 0 erreur.
+
+---
+
 ## Session du 7 juillet 2026
 
 _(en cours — les entrées s'ajoutent au fil des modifications)_

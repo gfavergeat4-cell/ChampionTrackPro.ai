@@ -2,40 +2,32 @@
  * AdminTeamScreen.tsx
  * Team detail screen for admins: calendar sync config + access codes.
  * Route params: { teamId: string, teamName?: string }
+ *
+ * Supabase-migrated: data via ctpApi (getTeamInfo, setTeamCalendar, triggerIcsSync).
+ * Courtlight styling (#070B14, card rgba(17,26,45,0.92), Inter, accent #00D4FF).
  */
 
 import React, { useEffect, useState, useCallback } from "react";
 import { Platform, ActivityIndicator } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { doc, getDoc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { db, functions } from "../lib/firebase";
+import { getTeamInfo, setTeamCalendar, triggerIcsSync } from "../lib/ctpApi";
 import { useIsDesktop } from "../hooks/useIsDesktop";
+import { courtlight as cl } from "../theme/tokens";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface TeamDoc {
+interface TeamData {
+  id: string;
   name?: string;
-  inviteCode?: string;
-  calendarUrl?: string;
-  icsUrl?: string;
-  calendarActive?: boolean;
-  calendarLastSyncStatus?: "ok" | "error" | "syncing";
-  calendarSyncError?: string;
-  calendarLastSyncAt?: any;
-  members?: number;
+  sport?: string;
+  ics_url?: string | null;
+  invite_code?: string | null;
+  timezone?: string;
 }
 
 type CopiedKey = "coach-code" | "coach-link" | "athlete-code" | "athlete-link" | null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function generateCode(len = 6): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
-}
 
 async function copyText(text: string): Promise<void> {
   if (typeof navigator !== "undefined" && navigator?.clipboard?.writeText) {
@@ -60,7 +52,7 @@ export default function AdminTeamScreen() {
 
   const { teamId, teamName: routeTeamName } = route.params || {};
 
-  const [team, setTeam] = useState<TeamDoc | null>(null);
+  const [team, setTeam] = useState<TeamData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,27 +69,19 @@ export default function AdminTeamScreen() {
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [copied, setCopied] = useState<CopiedKey>(null);
 
-  // Load team data
+  // Load team data from Supabase
   useEffect(() => {
     if (!teamId) { setError("Missing teamId"); setLoading(false); return; }
     let cancelled = false;
     (async () => {
       try {
-        const snap = await getDoc(doc(db, "teams", teamId));
+        const data = await getTeamInfo(teamId);
         if (cancelled) return;
-        if (!snap.exists()) { setError("Team not found"); setLoading(false); return; }
-        const data = snap.data() as TeamDoc;
-        setTeam(data);
-        setCalendarUrl(data.calendarUrl || data.icsUrl || "");
-        setCalendarActive(data.calendarActive !== false); // default true
-
-        // Generate inviteCode if missing
-        let code = data.inviteCode;
-        if (!code) {
-          code = generateCode(6);
-          await setDoc(doc(db, "teams", teamId), { inviteCode: code }, { merge: true });
-        }
-        setInviteCode(code);
+        if (!data) { setError("Team not found"); setLoading(false); return; }
+        setTeam(data as TeamData);
+        setCalendarUrl(data.ics_url || "");
+        setCalendarActive(true); // auto-sync active by default when URL is set
+        setInviteCode(data.invite_code || null);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || String(e));
       } finally {
@@ -112,12 +96,7 @@ export default function AdminTeamScreen() {
     setSaving(true);
     setSaveMsg(null);
     try {
-      await updateDoc(doc(db, "teams", teamId), {
-        calendarUrl: calendarUrl.trim(),
-        icsUrl: calendarUrl.trim(), // keep icsUrl in sync for CF compatibility
-        calendarActive,
-        updatedAt: serverTimestamp(),
-      });
+      await setTeamCalendar(teamId, calendarUrl.trim());
       setSaveMsg("Saved.");
       setTimeout(() => setSaveMsg(null), 2500);
     } catch (e: any) {
@@ -125,17 +104,15 @@ export default function AdminTeamScreen() {
     } finally {
       setSaving(false);
     }
-  }, [teamId, calendarUrl, calendarActive]);
+  }, [teamId, calendarUrl]);
 
   const handleSyncNow = useCallback(async () => {
     if (!teamId) return;
     setSyncing(true);
     setSyncMsg(null);
     try {
-      const fn = httpsCallable(functions, "syncIcsNow");
-      const result: any = await fn({ teamId });
-      const d = result?.data || {};
-      setSyncMsg(`Done — ${d.created ?? 0} created, ${d.updated ?? 0} updated`);
+      await triggerIcsSync();
+      setSyncMsg("Sync triggered. Sessions will update shortly.");
     } catch (e: any) {
       setSyncMsg("Error: " + (e?.message || String(e)));
     } finally {
@@ -154,13 +131,10 @@ export default function AdminTeamScreen() {
 
   // ── Sync status badge ──────────────────────────────────────────────────────
 
-  const syncStatus = team?.calendarLastSyncStatus;
   const syncBadge = (() => {
-    if (!team?.calendarUrl && !team?.icsUrl) return null;
-    if (syncStatus === "ok") return { dot: "#00FF9D", label: "Synced" };
-    if (syncStatus === "error") return { dot: "#FF4D4D", label: team?.calendarSyncError ? `Error: ${team.calendarSyncError}` : "Sync error" };
-    if (syncStatus === "syncing") return { dot: "#FFB800", label: "Syncing…" };
-    return { dot: "rgba(255,255,255,0.25)", label: "Never synced" };
+    if (!team?.ics_url) return null;
+    // Supabase schema does not track per-sync status — show URL-present badge
+    return { dot: cl.accent.cyan, label: "Calendar URL configured" };
   })();
 
   // ── Render guards ──────────────────────────────────────────────────────────
@@ -169,23 +143,23 @@ export default function AdminTeamScreen() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", background: "#0A0F1E", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color="#00D4FF" />
+      <div style={{ minHeight: "100vh", background: cl.bg.court, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator color={cl.accent.cyan} />
       </div>
     );
   }
 
   if (error || !team) {
     return (
-      <div style={{ minHeight: "100vh", background: "#0A0F1E", display: "flex", alignItems: "center", justifyContent: "center", color: "#FCA5A5", fontFamily: "'DM Sans', system-ui", fontSize: 14 }}>
+      <div style={{ minHeight: "100vh", background: cl.bg.court, display: "flex", alignItems: "center", justifyContent: "center", color: "#FCA5A5", fontFamily: cl.type.ui, fontSize: 14 }}>
         {error || "Team not found"}
       </div>
     );
   }
 
   const teamName = team.name || routeTeamName || teamId;
-  const coachCode = inviteCode ? `${inviteCode}-C` : "—";
-  const athleteCode = inviteCode ? `${inviteCode}-A` : "—";
+  const coachCode = inviteCode ? `${inviteCode}-C` : "\u2014";
+  const athleteCode = inviteCode ? `${inviteCode}-A` : "\u2014";
   const coachLink = inviteCode ? `${JOIN_BASE}/?code=${inviteCode}-C` : "";
   const athleteLink = inviteCode ? `${JOIN_BASE}/?code=${inviteCode}-A` : "";
 
@@ -195,9 +169,9 @@ export default function AdminTeamScreen() {
     <div style={{
       minHeight: "100vh",
       overflowY: "auto",
-      background: "radial-gradient(ellipse at top, #0D1F3C 0%, #0A0F1E 60%)",
-      color: "#FFFFFF",
-      fontFamily: "'DM Sans', system-ui",
+      background: cl.bg.vignette,
+      color: cl.text.hi,
+      fontFamily: cl.type.ui,
       padding: isDesktop ? "32px 48px 80px 48px" : "20px 16px 80px 16px",
     }}>
       <div style={{ maxWidth: contentWidth, margin: "0 auto" }}>
@@ -210,30 +184,30 @@ export default function AdminTeamScreen() {
             style={{
               background: "transparent",
               border: "1px solid rgba(255,255,255,0.15)",
-              borderRadius: 10,
-              color: "rgba(255,255,255,0.6)",
+              borderRadius: cl.radius.control,
+              color: cl.text.low,
               padding: "8px 14px",
               cursor: "pointer",
               fontSize: 13,
-              fontFamily: "'DM Sans', system-ui",
+              fontFamily: cl.type.ui,
             }}
           >
-            ← Back
+            &larr; Back
           </button>
-          <h1 style={{ margin: 0, fontSize: isDesktop ? 24 : 20, fontWeight: 700, color: "#ffffff" }}>
+          <h1 style={{ margin: 0, fontSize: isDesktop ? 24 : 20, fontWeight: 700, color: cl.text.hi }}>
             {teamName}
           </h1>
         </div>
 
         {/* ── Access Codes ──────────────────────────────────────────── */}
         <Section title="Access Codes" icon="🔑">
-          <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "rgba(255,255,255,0.50)" }}>
+          <p style={{ margin: "0 0 16px 0", fontSize: 13, color: cl.text.low }}>
             Share these codes with your staff and athletes to join the team.
           </p>
           <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 16 }}>
             <CodeCard
               label="Coach Code"
-              color="#00D4FF"
+              color={cl.accent.cyan}
               code={coachCode}
               link={coachLink}
               copied={copied}
@@ -262,13 +236,13 @@ export default function AdminTeamScreen() {
           {syncBadge && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: syncBadge.dot, flexShrink: 0 }} />
-              <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", maxWidth: 480 }}>{syncBadge.label}</span>
+              <span style={{ fontSize: 12, color: cl.text.low, maxWidth: 480 }}>{syncBadge.label}</span>
             </div>
           )}
 
           {/* Auto-sync toggle */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.70)" }}>Auto-sync (every 15 min)</span>
+            <span style={{ fontSize: 13, color: cl.text.mid }}>Auto-sync (every 15 min)</span>
             <button
               type="button"
               onClick={() => setCalendarActive(v => !v)}
@@ -277,10 +251,10 @@ export default function AdminTeamScreen() {
                 height: 24,
                 borderRadius: 12,
                 border: "none",
-                background: calendarActive ? "#00D4FF" : "rgba(255,255,255,0.15)",
+                background: calendarActive ? cl.accent.cyan : "rgba(255,255,255,0.15)",
                 cursor: "pointer",
                 position: "relative",
-                transition: "background 0.2s",
+                transition: `background ${cl.motion.fast}ms ${cl.motion.settle}`,
                 flexShrink: 0,
               }}
             >
@@ -292,13 +266,13 @@ export default function AdminTeamScreen() {
                 height: 18,
                 borderRadius: "50%",
                 background: "#fff",
-                transition: "left 0.2s",
+                transition: `left ${cl.motion.fast}ms ${cl.motion.settle}`,
               }} />
             </button>
           </div>
 
           {/* ICS URL input */}
-          <label style={{ display: "block", fontSize: 12, color: "rgba(255,255,255,0.45)", marginBottom: 6, letterSpacing: 1, textTransform: "uppercase" as const }}>
+          <label style={{ display: "block", fontSize: 11, color: cl.text.low, marginBottom: 6, letterSpacing: "0.16em", textTransform: "uppercase" as const }}>
             ICS Calendar URL
           </label>
           <input
@@ -309,12 +283,12 @@ export default function AdminTeamScreen() {
             style={{
               width: "100%",
               padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid rgba(0,212,255,0.25)",
+              borderRadius: cl.radius.control,
+              border: `1px solid rgba(0,212,255,0.25)`,
               background: "rgba(0,212,255,0.05)",
-              color: "#fff",
+              color: cl.text.hi,
               fontSize: 13,
-              fontFamily: "'Space Mono', monospace",
+              fontFamily: cl.type.mono,
               outline: "none",
               boxSizing: "border-box" as const,
               marginBottom: 8,
@@ -332,29 +306,29 @@ export default function AdminTeamScreen() {
               fontSize: 12,
               cursor: "pointer",
               padding: "4px 0",
-              fontFamily: "'DM Sans', system-ui",
+              fontFamily: cl.type.ui,
               marginBottom: showInstructions ? 12 : 0,
             }}
           >
-            {showInstructions ? "▲" : "▼"} How to get the Google Calendar link
+            {showInstructions ? "\u25B2" : "\u25BC"} How to get the Google Calendar link
           </button>
 
           {showInstructions && (
             <div style={{
               background: "rgba(0,212,255,0.05)",
               border: "1px solid rgba(0,212,255,0.15)",
-              borderRadius: 10,
+              borderRadius: cl.radius.control,
               padding: "12px 14px",
               fontSize: 12,
-              color: "rgba(255,255,255,0.60)",
+              color: cl.text.mid,
               lineHeight: 1.7,
               marginBottom: 12,
             }}>
               <strong style={{ color: "rgba(255,255,255,0.85)" }}>Google Calendar:</strong>
               <ol style={{ margin: "6px 0 0 0", paddingLeft: 18 }}>
-                <li>Open Google Calendar → Settings (gear icon)</li>
-                <li>Click on the calendar under "Settings for my calendars"</li>
-                <li>Scroll to "Integrate calendar"</li>
+                <li>Open Google Calendar &rarr; Settings (gear icon)</li>
+                <li>Click on the calendar under &ldquo;Settings for my calendars&rdquo;</li>
+                <li>Scroll to &ldquo;Integrate calendar&rdquo;</li>
                 <li>Copy the <strong>Public URL to this calendar</strong> (ending in <code>.ics</code>)</li>
                 <li>The calendar must be set to <strong>Public</strong> for sync to work</li>
               </ol>
@@ -369,18 +343,18 @@ export default function AdminTeamScreen() {
               disabled={saving}
               style={{
                 padding: "10px 24px",
-                borderRadius: 10,
+                borderRadius: cl.radius.control,
                 border: "none",
-                background: "linear-gradient(135deg, #00BFFF, #0066FF)",
+                background: `linear-gradient(135deg, ${cl.accent.cyan}, ${cl.accent.deep})`,
                 color: "#fff",
                 fontWeight: 600,
                 fontSize: 13,
                 cursor: saving ? "not-allowed" : "pointer",
                 opacity: saving ? 0.7 : 1,
-                fontFamily: "'DM Sans', system-ui",
+                fontFamily: cl.type.ui,
               }}
             >
-              {saving ? "Saving…" : "Save"}
+              {saving ? "Saving\u2026" : "Save"}
             </button>
             <button
               type="button"
@@ -388,18 +362,18 @@ export default function AdminTeamScreen() {
               disabled={syncing || !calendarUrl.trim()}
               style={{
                 padding: "10px 24px",
-                borderRadius: 10,
-                border: "1px solid rgba(0,212,255,0.35)",
+                borderRadius: cl.radius.control,
+                border: `1px solid rgba(0,212,255,0.35)`,
                 background: "transparent",
-                color: "#00D4FF",
+                color: cl.accent.cyan,
                 fontWeight: 600,
                 fontSize: 13,
                 cursor: (syncing || !calendarUrl.trim()) ? "not-allowed" : "pointer",
                 opacity: (syncing || !calendarUrl.trim()) ? 0.5 : 1,
-                fontFamily: "'DM Sans', system-ui",
+                fontFamily: cl.type.ui,
               }}
             >
-              {syncing ? "Syncing…" : "Sync Now"}
+              {syncing ? "Syncing\u2026" : "Sync Now"}
             </button>
           </div>
 
@@ -425,18 +399,19 @@ export default function AdminTeamScreen() {
 function Section({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   return (
     <div style={{
-      background: "#0D1526",
-      border: "1px solid rgba(0,212,255,0.14)",
-      borderRadius: 16,
+      background: cl.surface.card,
+      boxShadow: `${cl.shadow.e1}, ${cl.edge.rim}`,
+      border: `1px solid rgba(0,212,255,0.10)`,
+      borderRadius: cl.radius.card,
       padding: "20px 20px",
       marginBottom: 20,
     }}>
       <h2 style={{
         margin: "0 0 16px 0",
-        fontSize: 14,
-        fontWeight: 600,
-        color: "rgba(255,255,255,0.85)",
-        letterSpacing: 1.5,
+        fontSize: 11,
+        fontWeight: cl.type.weights.semibold,
+        color: cl.text.mid,
+        letterSpacing: "0.16em",
         textTransform: "uppercase" as const,
         display: "flex",
         alignItems: "center",
@@ -467,14 +442,14 @@ function CodeCard({ label, color, code, link, copied, codeKey, linkKey, onCopyCo
     <div style={{
       background: "rgba(0,212,255,0.04)",
       border: `1px solid ${color}33`,
-      borderRadius: 12,
+      borderRadius: cl.radius.card,
       padding: "16px",
     }}>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", letterSpacing: 1.5, textTransform: "uppercase" as const, marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: cl.text.low, letterSpacing: "0.16em", textTransform: "uppercase" as const, marginBottom: 8 }}>
         {label}
       </div>
       <div style={{
-        fontFamily: "'Space Mono', monospace",
+        fontFamily: cl.type.mono,
         fontSize: 22,
         fontWeight: 700,
         color,
@@ -484,8 +459,8 @@ function CodeCard({ label, color, code, link, copied, codeKey, linkKey, onCopyCo
         {code}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
-        <CopyBtn label={copied === codeKey ? "✓ Copied!" : "Copy Code"} onClick={onCopyCode} active={copied === codeKey} />
-        {link && <CopyBtn label={copied === linkKey ? "✓ Copied!" : "Copy Link"} onClick={onCopyLink} active={copied === linkKey} />}
+        <CopyBtn label={copied === codeKey ? "Copied!" : "Copy Code"} onClick={onCopyCode} active={copied === codeKey} />
+        {link && <CopyBtn label={copied === linkKey ? "Copied!" : "Copy Link"} onClick={onCopyLink} active={copied === linkKey} />}
       </div>
     </div>
   );
@@ -498,15 +473,15 @@ function CopyBtn({ label, onClick, active }: { label: string; onClick: () => voi
       onClick={onClick}
       style={{
         padding: "7px 14px",
-        borderRadius: 8,
+        borderRadius: cl.radius.control,
         border: active ? "1px solid #00FF9D" : "1px solid rgba(255,255,255,0.18)",
         background: active ? "rgba(0,255,157,0.10)" : "transparent",
-        color: active ? "#00FF9D" : "rgba(255,255,255,0.65)",
+        color: active ? "#00FF9D" : cl.text.mid,
         fontSize: 12,
         cursor: "pointer",
-        fontFamily: "'DM Sans', system-ui",
-        fontWeight: 500,
-        transition: "all 0.2s",
+        fontFamily: cl.type.ui,
+        fontWeight: cl.type.weights.medium,
+        transition: `all ${cl.motion.fast}ms ${cl.motion.settle}`,
       }}
     >
       {label}

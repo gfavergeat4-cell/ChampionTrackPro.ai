@@ -1,5 +1,5 @@
 // E2 — Session Watcher: détecte les séances terminées, envoie les notifications
-// initiales aux athlètes, gère les relances +20/40/60 min.
+// initiales aux athlètes, gère les relances +3h / +6h (parité ancien functions/index.js).
 // Cron pg_cron toutes les minutes. SERVICE-ROLE ONLY (même guard que notify).
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { sendPush } from "../_shared/webpush.ts";
@@ -55,13 +55,14 @@ async function pushToUsers(
   return { sent, failed, cleaned };
 }
 
-// ── Copywriting ─────────────────────────────────────────────
-const COPY = [
-  { title: "ChampionTrackPro", body: "Tell us — how did that session hit you?" },
-  { title: "Still got 60 seconds?", body: "Your coach needs your data to make tomorrow better." },
-  { title: "Don't let it go untracked", body: "Quick check-in keeps the whole team sharp." },
-  { title: "Final reminder", body: "Your session data closes soon." },
-];
+// ── Copywriting (PARITÉ — textes EXACTS de l'ancien functions/index.js) ──
+const COPY_INITIAL = { title: "ChampionTrackPro ⚡", body: "Tell us — how did that session hit you?" };
+const COPY_REMINDER_1 = { title: "Still got 60 seconds? ⏱", body: "Your coach needs your data to make tomorrow better for everyone." };
+const COPY_REMINDER_2 = { title: "Final reminder 🔒", body: "Don't let your session go untracked." };
+const COPY_BY_ATTEMPT: Record<number, { title: string; body: string }> = {
+  1: COPY_REMINDER_1,
+  2: COPY_REMINDER_2,
+};
 
 // ── Main handler ────────────────────────────────────────────
 Deno.serve(async (req) => {
@@ -105,7 +106,7 @@ Deno.serve(async (req) => {
 
     const url = `/?screen=questionnaire&trainingId=${session.id}&teamId=${session.team_id}`;
     const result = await pushToUsers(athleteIds, {
-      ...COPY[0],
+      ...COPY_INITIAL,
       url,
       trainingId: session.id,
       teamId: session.team_id,
@@ -120,14 +121,15 @@ Deno.serve(async (req) => {
       .eq("id", session.id);
     stats.sessions_notified++;
 
-    // Create pending reminders: +20min, +40min, +60min
+    // Create pending reminders: +3h and +6h (parité ancien functions/index.js)
+    const REMINDER_OFFSETS_MS = [3 * 60 * 60 * 1000, 6 * 60 * 60 * 1000]; // +3h, +6h
     const reminders = athleteIds.flatMap((uid) =>
-      [1, 2, 3].map((attempt) => ({
+      REMINDER_OFFSETS_MS.map((offsetMs, i) => ({
         team_id: session.team_id,
         session_id: session.id,
         user_id: uid,
-        remind_at: new Date(now.getTime() + attempt * 20 * 60 * 1000).toISOString(),
-        attempt,
+        remind_at: new Date(now.getTime() + offsetMs).toISOString(),
+        attempt: i + 1,
         status: "pending",
       }))
     );
@@ -164,8 +166,8 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    // Send reminder push (escalated copy)
-    const copy = COPY[Math.min(rem.attempt, COPY.length - 1)];
+    // Send reminder push (escalated copy — parité ancien repo)
+    const copy = COPY_BY_ATTEMPT[rem.attempt] ?? COPY_REMINDER_2;
     const url = `/?screen=questionnaire&trainingId=${rem.session_id}&teamId=${rem.team_id}`;
     await pushToUsers([rem.user_id], {
       ...copy,

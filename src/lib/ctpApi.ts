@@ -179,3 +179,105 @@ export async function getTeamMembers(teamId: string) {
   }
   return (mems ?? []).map((m) => ({ ...m, profiles: profMap[m.user_id] ?? null }));
 }
+
+// ── Admin ────────────────────────────────────────────────────
+/** Lists all teams the current user administers (role admin or coach). */
+export async function getAdminTeams() {
+  const { data: { user } } = await db().auth.getUser();
+  if (!user) return [];
+  const { data: mems } = await db().from("memberships")
+    .select("team_id, role, teams(id, name, sport, invite_code)")
+    .eq("user_id", user.id)
+    .in("role", ["admin", "coach"]);
+  if (!mems?.length) return [];
+  // Enrich with member count
+  const teams = await Promise.all(
+    (mems as any[]).map(async (m) => {
+      const team = m.teams as any;
+      const { count } = await db().from("memberships")
+        .select("*", { count: "exact", head: true })
+        .eq("team_id", m.team_id);
+      return {
+        id: team?.id ?? m.team_id,
+        name: team?.name ?? m.team_id,
+        sport: team?.sport ?? null,
+        invite_code: team?.invite_code ?? null,
+        memberCount: count ?? 0,
+      };
+    }),
+  );
+  return teams;
+}
+
+/** Get full team info for admin screens. */
+export async function getTeamInfo(teamId: string) {
+  const { data, error } = await db().from("teams")
+    .select("*").eq("id", teamId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** Update team info (admin). */
+export async function updateTeamInfo(teamId: string, updates: Record<string, any>) {
+  const { error } = await db().from("teams")
+    .update(updates).eq("id", teamId);
+  if (error) throw error;
+  return { ok: true };
+}
+
+/** Remove a member from a team (admin). */
+export async function removeMember(teamId: string, userId: string) {
+  const { error } = await db().from("memberships")
+    .delete().eq("team_id", teamId).eq("user_id", userId);
+  if (error) throw error;
+  return { ok: true };
+}
+
+/** Create a team via edge function (service-role pattern). */
+export async function createTeam(name: string, sport: string) {
+  const { data: { session } } = await db().auth.getSession();
+  const res = await fetch(
+    `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/create-team`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify({ name, sport }),
+    },
+  );
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error ?? "create team failed");
+  return j;
+}
+
+/** Get daily metrics for a team over a date range. */
+export async function getTeamMetricsRange(teamId: string, fromISO: string, toISO: string) {
+  const { data, error } = await db().from("daily_metrics")
+    .select("*").eq("team_id", teamId)
+    .gte("day", fromISO).lte("day", toISO)
+    .order("day");
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Get user profile. */
+export async function getMyProfile() {
+  const { data: { user } } = await db().auth.getUser();
+  if (!user) return null;
+  const { data: profile } = await db().from("profiles")
+    .select("*").eq("user_id", user.id).maybeSingle();
+  const membership = await getMyMembership();
+  return { user, profile, membership };
+}
+
+/** Update user profile. */
+export async function updateMyProfile(updates: { display_name?: string; jersey_number?: number; position?: string }) {
+  const { data: { user } } = await db().auth.getUser();
+  if (!user) throw new Error("not signed in");
+  const { error } = await db().from("profiles")
+    .upsert({ user_id: user.id, ...updates }, { onConflict: "user_id" });
+  if (error) throw error;
+  return { ok: true };
+}
