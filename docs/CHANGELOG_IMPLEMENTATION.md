@@ -1,6 +1,24 @@
 # CHANGELOG — Implémentation des documents fondateurs
 **Mis à jour en temps réel à chaque modification. Réf : docs 01-04 + Constitution.**
 
+## Session du 16 juillet 2026 — PARITÉ ATHLÈTE (A1-A5)
+
+### A1-A2 — Rebranchement écrans athlète validés sur Supabase
+- Diff confirmé : les 5 fichiers athlète (AthleteHome.js, AthleteHomeNew.tsx, ScheduleScreenNewScreen.js, ScheduleScreenNew.tsx, UnifiedAthleteNavigation.tsx) sont IDENTIQUES entre ancien repo et V2.
+- `scheduleQueriesSupabase.ts` : nouveau module — miroir API de `scheduleQueries.ts` (getUpcomingTrainings, getEventsForDay/Week/Month, getNextSession) lisant `sessions` + `responses` Supabase au lieu de Firebase Firestore. Même type de retour `EventWithResponse`.
+- `AthleteHomeNew.tsx` : ajout branche `if (USE_SUPABASE)` dans le useEffect de chargement data UNIQUEMENT. Zéro changement JSX/layout/style. Auth Supabase → getMyProfile/getMyMembership → getUpcomingTrainingsSupabase → même format formattedEvents.
+- `ScheduleScreenNew.tsx` : même approche — branche `if (USE_SUPABASE)` dans loadEvents, appels getEventsForDay/Week/MonthSupabase. Zéro changement JSX.
+
+### A3 — Navigator rebranché
+- `StitchNavigator.js` AthleteTabs : Home = AthleteHome (ancien validé, USE_SUPABASE branché en interne), Schedule = ScheduleScreenNewScreen (ancien validé, USE_SUPABASE branché en interne). AthleteHomeSupabase/ScheduleScreenSupabase débranchés (fichiers conservés).
+- Profile reste ProfileScreenSupabase (signOut Supabase fonctionnel).
+
+### A5 — Vérification
+- Build web : OK (0 erreur, 4.25 MB bundle).
+- Écrans athlète : JSX/layout/textes/pastilles/tab bar = copie exacte de l'ancien, données Supabase.
+
+---
+
 ## Session du 16 juillet 2026 — PARITÉ P1-P4
 
 ### P1 — Notifications : parité timing/texte (doc 07)

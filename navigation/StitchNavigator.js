@@ -69,8 +69,11 @@ function AthleteTabs() {
         tabBarStyle: { display: 'none' }, // Masque complètement la barre de navigation
       }}
     >
-      <AthleteTab.Screen name="Home" component={USE_SUPABASE ? AthleteHomeSupabase : AthleteHome} />
-      <AthleteTab.Screen name="Schedule" component={USE_SUPABASE ? ScheduleScreenSupabase : ScheduleScreenNewScreen} />
+      {/* A3 Parité: AthleteHome/ScheduleScreenNewScreen = écrans validés de l'ancien,
+           rebranchés sur Supabase via USE_SUPABASE dans leur useEffect data-loading.
+           AthleteHomeSupabase/ScheduleScreenSupabase = débranchés (fichiers conservés). */}
+      <AthleteTab.Screen name="Home" component={AthleteHome} />
+      <AthleteTab.Screen name="Schedule" component={ScheduleScreenNewScreen} />
       <AthleteTab.Screen
         name="Profile"
         component={USE_SUPABASE ? ProfileScreenSupabase : ProfileScreen}

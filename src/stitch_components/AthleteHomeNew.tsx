@@ -8,9 +8,12 @@ import { tokens } from "../theme/tokens";
 import { useDevice } from "../hooks/useDevice";
 import { getResponsiveSpacing, getResponsiveFontSize, getMainContainerStyle } from "../utils/responsive";
 import { getUpcomingTrainings } from "../lib/scheduleQueries";
+import { getUpcomingTrainingsSupabase } from "../lib/scheduleQueriesSupabase";
 import { QuestionnaireState } from "../utils/questionnaire";
 import { DateTime } from "luxon";
 import { auth, db } from "../lib/firebase";
+import { USE_SUPABASE } from "../lib/supabase";
+import { getSession as supaGetSession, getMyProfile as supaGetMyProfile, getMyMembership as supaGetMyMembership } from "../lib/ctpApi";
 import { registerWebPushTokenForCurrentUser } from "../services/webNotifications";
 import { getApp } from "firebase/app";
 import { resolveAthleteTeamId } from "../lib/teamContext";
@@ -60,12 +63,82 @@ export default function AthleteHome({
     setLoading(true);
   };
 
-  // Charger les entraînements du calendrier Google
+  // Charger les entraînements du calendrier Google (ou Supabase)
   useEffect(() => {
     const loadCalendarEvents = async () => {
       try {
         setLoading(true);
         setError(null);
+
+        // ── SUPABASE PATH ───────────────────────────────────────
+        if (USE_SUPABASE) {
+          const { data: { session } } = await (await import('../lib/supabase')).supabase!.auth.getSession();
+          const user = session?.user;
+          if (!user) { setLoading(false); return; }
+
+          // Profile
+          const prof = await supaGetMyProfile();
+          if (prof?.profile) {
+            setUserData({
+              firstName: prof.profile.display_name?.split(' ')[0] || user.email?.split('@')[0],
+              profileImage: null,
+            });
+          }
+          // Notification reminder (same web logic)
+          if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof Notification !== 'undefined') {
+            const dismissed = localStorage.getItem('notifReminderDismissed') === 'true';
+            if (Notification.permission !== 'granted' && !dismissed) {
+              setShowNotifReminder(true);
+            }
+          }
+
+          const membership = await supaGetMyMembership();
+          const teamId = membership?.team_id;
+          if (!teamId) { console.log('[SUPA] No team for user'); setLoading(false); return; }
+
+          const upcomingTrainings = await getUpcomingTrainingsSupabase(teamId, user.id, 50, 30);
+          const fallbackTz = 'UTC';
+
+          // Format events — same mapping as Firebase path below
+          const formattedEvents = upcomingTrainings.map((event: any) => {
+            const displayTz = event.displayTz || event.tzid || event.timeZone || fallbackTz;
+            const startLocal = event.startDate
+              ? DateTime.fromJSDate(event.startDate, { zone: 'utc' }).setZone(displayTz)
+              : null;
+            const endLocal = event.endDate
+              ? DateTime.fromJSDate(event.endDate, { zone: 'utc' }).setZone(displayTz)
+              : startLocal;
+            const hasTime = Boolean(startLocal && endLocal);
+            const title = event.title || event.summary || 'Training';
+            const timeLabel = hasTime
+              ? `${startLocal!.toFormat('HH:mm')} - ${endLocal!.toFormat('HH:mm')}`
+              : '──:──';
+            const displayDate = startLocal
+              ? startLocal.setLocale('fr').toFormat("cccc d LLLL")
+              : 'Date à confirmer';
+
+            return {
+              id: event.id,
+              title,
+              time: timeLabel,
+              timeForNextSession: timeLabel,
+              displayDate,
+              hasResponse: event.hasResponse ?? false,
+              questionnaireState: event.questionnaireState,
+              source: event.source,
+              tzid: displayTz,
+              displayTz,
+              hasTime,
+              teamId,
+              ...event,
+            };
+          });
+
+          setCalendarEvents(formattedEvents);
+          setLoading(false);
+          return;
+        }
+        // ── END SUPABASE PATH ───────────────────────────────────
 
         const currentUser =
           auth.currentUser ??
@@ -83,7 +156,7 @@ export default function AthleteHome({
         }
 
         console.log('[FB][PROJECT][ATHLETE]', getApp()?.options?.projectId);
-        
+
         // Fetch user data for header
         const userDoc = await getDoc(doc(db, "users", currentUser.uid));
         if (userDoc.exists()) {
@@ -105,7 +178,7 @@ export default function AthleteHome({
             }
           }
         }
-        
+
         const teamId = await resolveAthleteTeamId(db, currentUser.uid);
         console.log('[READY]', { hasUser: !!currentUser, teamId });
 

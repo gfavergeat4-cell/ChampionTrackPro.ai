@@ -7,9 +7,12 @@ import { tokens } from "../theme/tokens";
 import { useDevice } from "../hooks/useDevice";
 import { getResponsiveSpacing, getResponsiveFontSize, getMainContainerStyle } from "../utils/responsive";
 import { getEventsForDayLegacy as getEventsForDay, getEventsForWeek, getEventsForMonth } from "../lib/scheduleQueries";
+import { getEventsForDaySupabase, getEventsForWeekSupabase, getEventsForMonthSupabase } from "../lib/scheduleQueriesSupabase";
 import { DateTime } from "luxon";
 import { toJSDate } from "../utils/time";
 import { auth, db } from "../lib/firebase";
+import { USE_SUPABASE } from "../lib/supabase";
+import { getMyMembership as supaGetMyMembership } from "../lib/ctpApi";
 import { getApp } from "firebase/app";
 import { resolveAthleteTeamId } from "../lib/teamContext";
 import MobileViewport from "../components/MobileViewport";
@@ -166,6 +169,33 @@ export default function ScheduleScreen({ onRespond }: ScheduleScreenProps) {
 
         const safeSelectedDate = toJSDate(selectedDate);
 
+        // ── SUPABASE PATH ───────────────────────────────────────
+        if (USE_SUPABASE) {
+          const { data: { session } } = await (await import('../lib/supabase')).supabase!.auth.getSession();
+          const user = session?.user;
+          if (!user) { setLoading(false); return; }
+
+          const membership = await supaGetMyMembership();
+          const teamId = membership?.team_id;
+          if (!teamId) { setLoading(false); return; }
+
+          let eventsData: any[] = [];
+          if (activeTab === 'Day') {
+            eventsData = await getEventsForDaySupabase(teamId, safeSelectedDate, user.id);
+          } else if (activeTab === 'Week') {
+            const weekStart = DateTime.fromJSDate(currentWeek).startOf('week').toJSDate();
+            eventsData = await getEventsForWeekSupabase(teamId, weekStart, user.id);
+          } else {
+            const monthAnchor = new Date(safeSelectedDate.getFullYear(), safeSelectedDate.getMonth(), 1);
+            eventsData = await getEventsForMonthSupabase(teamId, monthAnchor, user.id);
+          }
+
+          setEvents(eventsData);
+          setLoading(false);
+          return;
+        }
+        // ── END SUPABASE PATH ───────────────────────────────────
+
         const currentUser =
           auth.currentUser ??
           (await new Promise((resolve) => {
@@ -210,7 +240,7 @@ export default function ScheduleScreen({ onRespond }: ScheduleScreenProps) {
         );
         if (activeTab === 'Day') {
           eventsData = await getEventsForDay(teamId, safeSelectedDate, currentUser.uid);
-          
+
           // DEBUG: Log all events returned from Firestore for the selected day
           console.log('[DEBUG][DAY_VIEW] Raw events from Firestore:', {
             selectedDate: safeSelectedDate.toISOString(),
