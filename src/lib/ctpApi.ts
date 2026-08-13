@@ -167,7 +167,7 @@ export async function removePushSubscription(endpoint: string) {
 // ── Team ─────────────────────────────────────────────────────
 export async function getTeamMembers(teamId: string) {
   const { data: mems, error } = await db().from("memberships")
-    .select("user_id, role, jersey_number, pseudonym")
+    .select("user_id, role, jersey_number, position, pseudonym")
     .eq("team_id", teamId);
   if (error) throw error;
   const ids = (mems ?? []).map((m) => m.user_id);
@@ -178,6 +178,66 @@ export async function getTeamMembers(teamId: string) {
     for (const p of profs ?? []) profMap[p.user_id] = p;
   }
   return (mems ?? []).map((m) => ({ ...m, profiles: profMap[m.user_id] ?? null }));
+}
+
+/**
+ * Dernière séance déjà terminée de l'équipe + les réponses associées.
+ * Sert au statut de compliance du roster coach (parité CoachTeamScreen V1 :
+ * worry_flag, readiness < 40, friction_impact > 70).
+ */
+export async function getTeamLatestSessionResponses(teamId: string) {
+  const { data: session } = await db().from("sessions")
+    .select("id, title, start_utc, end_utc")
+    .eq("team_id", teamId)
+    .eq("cancelled", false)
+    .lte("end_utc", new Date().toISOString())
+    .order("end_utc", { ascending: false })
+    .limit(1).maybeSingle();
+  if (!session) return { session: null, responses: [] as any[] };
+
+  const { data: responses } = await db().from("responses")
+    .select("user_id, readiness_score, worry_flag, has_friction, friction_impact, submitted_at")
+    .eq("session_id", (session as any).id);
+  return { session, responses: responses ?? [] };
+}
+
+/**
+ * Réponses de plusieurs séances en une passe (planning coach).
+ * Découpé en tranches de 200 pour rester sous les limites d'URL PostgREST.
+ */
+export async function getResponsesForSessions(sessionIds: string[]) {
+  if (!sessionIds.length) return [] as any[];
+  const out: any[] = [];
+  for (let i = 0; i < sessionIds.length; i += 200) {
+    const chunk = sessionIds.slice(i, i + 200);
+    const { data, error } = await db().from("responses")
+      .select("user_id, session_id, worry_flag, has_friction, readiness_score")
+      .in("session_id", chunk);
+    if (error) throw error;
+    if (data) out.push(...data);
+  }
+  return out;
+}
+
+/** Historique des métriques d'un athlète (fiche joueur coach). */
+export async function getAthleteMetricsRange(userId: string, fromISO: string, toISO: string) {
+  const { data, error } = await db().from("daily_metrics")
+    .select("*").eq("user_id", userId)
+    .gte("day", fromISO).lte("day", toISO)
+    .order("day");
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Dernières réponses brutes d'un athlète (fiche joueur coach). */
+export async function getAthleteResponses(userId: string, teamId: string, max = 30) {
+  const { data, error } = await db().from("responses")
+    .select("id, session_id, metrics, readiness_score, has_friction, friction_type, worry_level, worry_flag, submitted_at")
+    .eq("user_id", userId).eq("team_id", teamId)
+    .order("submitted_at", { ascending: false })
+    .limit(max);
+  if (error) throw error;
+  return data ?? [];
 }
 
 // ── Admin ────────────────────────────────────────────────────
@@ -250,6 +310,92 @@ export async function createTeam(name: string, sport: string) {
   const j = await res.json();
   if (!res.ok) throw new Error(j.error ?? "create team failed");
   return j;
+}
+
+// ── Console santé système (doc 09 lot L3) ────────────────────
+export interface TeamHealth {
+  id: string;
+  name: string;
+  athletes: number;
+  staff: number;
+  lastBriefDate: string | null;
+  briefsCount: number;
+  sessionsEnded: number;
+  sessionsUpcoming: number;
+  responses: number;
+  expectedResponses: number;
+  compliancePct: number | null;
+  remindersPending: number;
+  remindersSent: number;
+  cost30dUsd: number | null;
+  llmErrors: number | null;
+  icsConfigured: boolean;
+}
+
+async function safe<T>(p: PromiseLike<{ data: T | null }>, fallback: T): Promise<T> {
+  try { const { data } = await p; return (data ?? fallback) as T; }
+  catch { return fallback; }
+}
+
+/**
+ * Photographie lecture seule de l'état du système, équipe par équipe.
+ * Répond à « est-ce que tout tourne, et sinon où ? » sans ouvrir Supabase.
+ * `cost30dUsd` et les relances nécessitent la migration 010 ; en son absence
+ * les champs valent null / 0 plutôt que de faire échouer l'écran.
+ */
+export async function getAdminSystemHealth(days = 7): Promise<TeamHealth[]> {
+  const teams = await getAdminTeams();
+  const now = Date.now();
+  const sinceISO = new Date(now - days * 86400000).toISOString();
+  const sinceDay = sinceISO.slice(0, 10);
+  const since30ISO = new Date(now - 30 * 86400000).toISOString();
+  const nowISO = new Date(now).toISOString();
+
+  return Promise.all(teams.map(async (t: any): Promise<TeamHealth> => {
+    const [briefs, members, responses, sessions, logs, reminders, info] = await Promise.all([
+      safe(db().from("briefs").select("brief_date").eq("team_id", t.id)
+        .gte("brief_date", sinceDay).order("brief_date", { ascending: false }), [] as any[]),
+      safe(db().from("memberships").select("role").eq("team_id", t.id), [] as any[]),
+      safe(db().from("responses").select("id").eq("team_id", t.id)
+        .gte("submitted_at", sinceISO), [] as any[]),
+      safe(db().from("sessions").select("id, end_utc").eq("team_id", t.id)
+        .eq("cancelled", false).gte("end_utc", sinceISO), [] as any[]),
+      safe(db().from("llm_logs").select("cost_usd, ok").eq("team_id", t.id)
+        .gte("created_at", since30ISO), null as any[] | null),
+      safe(db().from("pending_reminders").select("status").eq("team_id", t.id)
+        .gte("created_at", sinceISO), [] as any[]),
+      safe(db().from("teams").select("ics_url").eq("id", t.id).limit(1), [] as any[]),
+    ]);
+
+    const athletes = (members as any[]).filter((m) => m.role === "athlete").length;
+    const staff = (members as any[]).filter((m) => m.role !== "athlete").length;
+    const ended = (sessions as any[]).filter((s) => s.end_utc <= nowISO);
+    const upcoming = (sessions as any[]).length - ended.length;
+    const expected = ended.length * athletes;
+
+    return {
+      id: t.id,
+      name: t.name,
+      athletes,
+      staff,
+      lastBriefDate: (briefs as any[])[0]?.brief_date ?? null,
+      briefsCount: (briefs as any[]).length,
+      sessionsEnded: ended.length,
+      sessionsUpcoming: upcoming,
+      responses: (responses as any[]).length,
+      expectedResponses: expected,
+      compliancePct: expected > 0
+        ? Math.round(((responses as any[]).length / expected) * 100)
+        : null,
+      remindersPending: (reminders as any[]).filter((r) => r.status === "pending").length,
+      remindersSent: (reminders as any[]).filter((r) => r.status === "sent").length,
+      cost30dUsd: logs
+        ? (logs as any[]).reduce((a, l) => a + Number(l.cost_usd ?? 0), 0)
+        : null,
+      llmErrors: logs ? (logs as any[]).filter((l) => l.ok === false).length : null,
+      icsConfigured: Boolean((info as any[])[0]?.ics_url),
+    };
+  }));
 }
 
 /** Get daily metrics for a team over a date range. */

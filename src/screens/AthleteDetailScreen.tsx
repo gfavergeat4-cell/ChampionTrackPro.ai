@@ -1,17 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Platform, View, Text } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import {
-  collectionGroup,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  limit,
-  getDoc,
-  doc,
-} from "firebase/firestore";
-import { db } from "../../services/firebaseConfig";
+import { getTeamMembers, getAthleteResponses } from "../lib/ctpApi";
 import { calculateEMA, calculateReadiness } from "../utils/analytics";
 import {
   LineChart,
@@ -117,43 +107,45 @@ export default function AthleteDetailScreen() {
       try {
         setLoading(true);
 
-        // Fetch user doc for name/position/jersey
-        try {
-          const userSnap = await getDoc(doc(db, "users", resolvedUid));
-          if (userSnap.exists() && !cancelled) {
-            const uData = userSnap.data() as any;
-            if (uData.fullName) setAthleteName(uData.fullName);
-            else if (uData.displayName) setAthleteName(uData.displayName);
-            if (uData.position) setPosition(uData.position);
-            if (uData.jerseyNumber != null) setJerseyNumber(Number(uData.jerseyNumber));
-          }
-        } catch {
-          // ignore — use props
-        }
-
-        // Query responses collectionGroup where userId == uid AND teamId == teamId
-        let q;
+        // ── Identité de l'athlète (memberships + profiles) ────────────────
         if (teamId) {
-          q = query(
-            collectionGroup(db, "responses"),
-            where("userId", "==", resolvedUid),
-            where("teamId", "==", teamId),
-            orderBy("submittedAt", "desc"),
-            limit(28)
-          );
-        } else {
-          q = query(
-            collectionGroup(db, "responses"),
-            where("userId", "==", resolvedUid),
-            orderBy("submittedAt", "desc"),
-            limit(28)
-          );
+          try {
+            const members = await getTeamMembers(teamId);
+            const me = (members as any[]).find((m) => m.user_id === resolvedUid);
+            if (me && !cancelled) {
+              const name = me.profiles?.display_name || me.pseudonym;
+              if (name) setAthleteName(name);
+              if (me.position) setPosition(me.position);
+              if (me.jersey_number != null) setJerseyNumber(Number(me.jersey_number));
+            }
+          } catch {
+            // ignore — on garde les props passées par le roster
+          }
         }
 
-        const snap = await getDocs(q);
+        // ── Réponses (Postgres) remappées au format attendu par le rendu ──
+        // Le rendu existant consomme des champs camelCase et un submittedAt
+        // façon Timestamp Firestore ({seconds}, toDate()). On conserve ce
+        // contrat pour ne pas toucher une ligne d'affichage (loi de parité).
+        if (!teamId) throw new Error("No team context for this athlete.");
+        const rows = await getAthleteResponses(resolvedUid, teamId, 28);
         if (!cancelled) {
-          const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          setResponses(docs);
+          const mapped = (rows as any[]).map((r) => {
+            const d = new Date(r.submitted_at);
+            return {
+              id: r.id,
+              metrics: r.metrics ?? {},
+              readinessScore: r.readiness_score,
+              workloadAU: r.workload_au ?? undefined,
+              hasFriction: r.has_friction,
+              frictionType: r.friction_type,
+              worryLevel: r.worry_level,
+              worryFlag: r.worry_flag,
+              sessionType: r.session_type ?? "practice",
+              submittedAt: { seconds: Math.floor(d.getTime() / 1000), toDate: () => d },
+            };
+          });
+          setResponses(mapped);
         }
       } catch (e: any) {
         if (!cancelled) setError(e?.message || String(e));

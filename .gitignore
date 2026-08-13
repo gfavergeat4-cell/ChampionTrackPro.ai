@@ -9,3 +9,7 @@ dist/
 scripts/migration/serviceAccount.json
 scripts/migration/export/
 .DS_Store
+
+.vercel
+.env*
+nul

@@ -178,3 +178,64 @@ _(en cours — les entrées s'ajoutent au fil des modifications)_
 - Court map SVG dans le fond du check-in (doc 06 §7.2 — les lignes de terrain en filigrane derrière le slider).
 - Landing 3D (doc 03 §3) — asset commercial.
 - Règles moteur : attendent l'ingénierie Gabin (doc 02 §7) — AUCUN seuil activé sans lui (Constitution).
+
+## Session du 31 juillet 2026
+
+### Bloc 9 — Cartographie et audit (aucune modification de code)
+
+- **`docs/08_CARTOGRAPHIE_TECHNIQUE.md`** (nouveau) : structure réelle de l'app, vérifiée fichier par fichier. Stack et versions, chaîne de démarrage, commutateur `USE_SUPABASE`, arborescence commentée, routage par rôle, tableau écran → source de données → état, inventaire `ctpApi`, backend Supabase (18 tables, 6 vues, 6 fonctions SQL, RLS, 9 migrations), 9 edge functions, 4 automatisations, chaîne de bout en bout, build/déploiement, environnement, test de santé. **Document de référence pour tout agent externe.**
+- **`docs/09_AUDIT_ET_ROADMAP.md`** (nouveau) : audit structurel, priorité interface admin et coach. Trois blocages P0, état écran par écran, manques classés par valeur, dette technique chiffrée, séquence L1-L7 avec critères de sortie vérifiables.
+- **`CLAUDE.md`** : cartographie du repo complétée (docs 06 à 09).
+
+#### Anomalies constatées pendant l'audit (non corrigées — prévision uniquement)
+1. **Chaîne push inopérante** : `registerVapidPush()` n'a qu'un appelant (`OnboardingNotifScreen.tsx:63`), écran jamais rendu car `onboardingComplete` est fixé à `true` en dur dans la branche Supabase de `AuthGate` (`StitchNavigator.js:485`). `push_subscriptions` reste donc vide.
+2. **Trois écrans coach lisent Firestore** → vides sous `USE_SUPABASE=1` : `CoachTeamScreen`, `CoachScheduleScreen`, `AthleteDetailScreen`. La fiche joueur est de ce fait inaccessible (seul chemin d'accès : `CoachTeamScreen:206`).
+3. **Admin** : onglet « Teams » = doublon d'`AdminHome` ; `AdminTeamScreen` (490 l.) et `CreateTeamModal` (536 l., Firestore) enregistrés mais jamais atteints.
+4. **Code débranché conservé** : `AthleteHomeSupabase` + `ScheduleScreenSupabase` (1 190 l.).
+5. **Divers** : fichier `nul` parasite à la racine ; `dist/` et `web/` coexistent alors que seul `web/dist` est déclaré dans `vercel.json`.
+6. **Moteur à vide** : aucune ligne `rules.enabled = true` → `flags` toujours vide → le brief reste descriptif. Décision réservée à Gabin (Constitution art. 2).
+
+### Hors V2 — remise en ligne de l'ancienne version
+- Dépôt `gfavergeat4-cell/ChampionTrackPro_` : `main` écrasé par erreur depuis un dossier local dont le git ne suivait que 70 fichiers, puis restauré depuis la branche de sauvegarde `backup-main-avant-ecrasement` (603 fichiers).
+- Clone propre dans `APP/ChampionTrackPro-LIVE`, puis trois modifications réversibles : `public/landing` → `public/_landing_disabled`, rewrites `vercel.json` vers `/index.html` (les trois règles vers `/app.html` devenaient invalides sans la landing), `initialRouteName="Login"` dans `navigation/StitchNavigator.js`. L'app s'ouvre désormais sur l'écran de connexion.
+
+### Bloc 10 — Implémentation de l'audit : lots L1 à L4 (31 juillet 2026)
+
+#### L1 — Déblocage de la chaîne de notifications push (P0-1)
+- `src/services/vapidPush.ts` : ajout de `ensurePushSubscriptionSynced()` — lit la souscription `PushManager` de CE navigateur et la ré-`upsert` dans `push_subscriptions` (idempotent, répare une ligne perdue). **Ne demande jamais de permission**, appelable au démarrage. Ajout de `isPushOnboardingSkipped()` / `markPushOnboardingSkipped()` / `clearPushOnboardingSkipped()` (clé `ctp_push_onboarding_skipped`).
+- `navigation/StitchNavigator.js`, branche Supabase de `AuthGate` : `onboardingComplete` n'est plus fixé à `true` en dur. Pour un athlète, il vaut `souscription valide || renoncement explicite`. **L'état d'onboarding est désormais dérivé de la réalité de l'appareil, pas d'un booléen** — un booléen serveur mentirait au changement de téléphone (raisonnement détaillé : doc 09 §7).
+- `src/screens/OnboardingNotifScreen.tsx` : `markOnboardingComplete()` devient no-op sur le chemin Supabase ; nouveau `markSkipped()`. Sur le chemin Supabase, l'écran ne se ferme que si `registerVapidPush()` **retourne true** — auparavant il se fermait sur la seule permission, laissant la chaîne morte.
+- `src/screens/ProfileScreenSupabase.tsx` : `requestNotifPermission()` appelait uniquement `Notification.requestPermission()` — **aucune souscription n'était créée**. Remplacé par `registerVapidPush()`. Nouvel état `notifSubscribed` : « Active » signifie maintenant *abonné*, pas *permission accordée*. État intermédiaire cliquable (« Almost there — Tap to finish setup »).
+
+#### L2 — Rebranchement des trois écrans coach (P0-2)
+Rendu **non modifié** (loi de parité) : seuls les chargements de données ont changé.
+- `src/lib/ctpApi.ts` : `getTeamMembers()` remonte désormais `position` ; ajout de `getTeamLatestSessionResponses()`, `getResponsesForSessions()` (tranches de 200), `getAthleteMetricsRange()`, `getAthleteResponses()`.
+- `CoachTeamScreen.tsx` (313 → 278 l.) : Firestore → `getMyMembership` + `getTeamMembers` + `getTeamLatestSessionResponses`. Seuils « at-risk » identiques à la V1 (`worry_flag`, readiness < 40, `friction_impact` > 70).
+- `AthleteDetailScreen.tsx` (570 → 562 l.) : `collectionGroup` → `getAthleteResponses`. Les lignes Postgres sont remappées vers le contrat attendu par le rendu (camelCase + `submittedAt` façon Timestamp) plutôt que de réécrire 400 lignes d'affichage.
+- `CoachScheduleScreen.tsx` (720 → 706 l.) : Firestore → `listSessions` + `getResponsesForSessions`. **Fenêtre bornée −60 j / +60 j** : la table `sessions` contient des milliers d'occurrences récurrentes, tout charger faisait tomber l'écran.
+
+#### L3 — Console santé système (admin)
+- `supabase/migrations/010_admin_health_read.sql` : policies de **lecture seule** sur `llm_logs` et `pending_reminders` pour l'admin de l'équipe. Ces tables n'avaient aucune policy, donc aucun accès client — le coût LLM n'était lisible que dans le SQL editor.
+- `src/lib/ctpApi.ts` : `getAdminSystemHealth(days)` + type `TeamHealth`. Chaque sous-requête est encapsulée : si la migration 010 n'est pas appliquée, les champs concernés valent `null` au lieu de faire échouer l'écran.
+- `src/screens/AdminSystemHealthScreen.tsx` (nouveau, 284 l.) : par équipe — dernier brief et son âge, briefs sur 7 j, compliance (réponses ÷ séances terminées × athlètes), séances passées/à venir, relances envoyées/en attente, coût 30 j, erreurs LLM. Bandeau agrégé. **Lecture seule.**
+
+#### L4 — Nettoyage de la navigation admin
+- Onglet « Teams » (qui rendait `AdminHomeScreen`, doublon d'« AdminHome ») remplacé par l'onglet « Health ».
+- Routes `AdminTeamScreen` et `CreateTeamModal` retirées : jamais atteintes par un `navigate()`, et `CreateTeamModal` écrivait sur Firestore alors qu'`AdminHomeScreen` crée les équipes via `ctpApi.createTeam`. **Fichiers conservés**, seules les routes disparaissent.
+
+#### Vérifications effectuées
+- Parsing Babel (JSX + TypeScript) des 9 fichiers touchés : OK.
+- Résolution complète du graphe d'imports depuis `index.js` : 73 fichiers locaux, **zéro import non résolu**.
+- Atteignabilité confirmée des 4 écrans rebranchés/créés ; `AdminTeamScreen` et `CreateTeamModal` confirmés hors du graphe actif.
+- Aucun résidu Firestore dans les 3 écrans coach. Les chemins Firebase restent intacts ailleurs (Constitution art. 6, extinction en M8).
+- ⚠ **Build web non exécuté ici** (Metro trop lent à travers le montage) : à lancer en local — `npm run web:build`.
+
+#### Non fait volontairement
+- Aucune règle d'interprétation activée (`rules.enabled` reste `false` partout) — domaine réservé au fondateur.
+- Questionnaire NCAA : gelé, aucune décision anticipée.
+- Lots L5 (création de séance in-app), L6 (boucle de décision étendue + export), L7 (extinction Firebase) : non commencés.
+
+#### Action requise — Gabin
+1. `supabase db push` (applique la migration 010).
+2. `npm run web:build` pour valider le bundle localement.
+3. Vérifications de terrain V2 à V5 listées dans `docs/09_AUDIT_ET_ROADMAP.md §10` — la plus importante : recevoir une vraie notification sur un vrai téléphone.

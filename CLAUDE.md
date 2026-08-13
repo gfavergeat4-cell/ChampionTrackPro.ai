@@ -14,6 +14,9 @@ Système d'aide à la décision pour staffs de basketball NCAA : check-in athlè
 5. RLS multi-tenant non négociable. Secrets jamais en clair (ni code, ni chat, ni commit).
 6. Auditer avant de modifier ; produit fonctionnel à chaque commit ; les chemins Firebase restent intacts derrière `if (USE_SUPABASE)` jusqu'à l'étape M8.
 
+## 2bis. LOI DE PARITÉ (15 juil. — prime sur toute interprétation)
+L'ancienne version en ligne (`C:\GAB\PRO\ChampionTrackPro_-main`) fait foi pour fonctionnalités, écrans, questionnaires, textes et timings de notifications, workflows et console admin. V2 = copie exacte nettoyée + backend SQL + améliorations validées par Gabin (Courtlight). Ne JAMAIS improviser un contenu ou une règle qui existe déjà dans l'ancien code : ouvrir, copier, nettoyer. Détail et matrice : `docs/07_CONTRAT_DE_PARITE.md`.
+
 ## 3. Cartographie du repo
 ```
 CLAUDE.md                ← ce fichier
@@ -25,6 +28,11 @@ docs/
   02_MOTEUR_DE_REGLES_SPORT_SCIENCE.md ← l'établi de Gabin : ~20 règles DRAFT sourcées
   03_DIRECTION_ARTISTIQUE.md         ← DA « Stadium at night », tokens, doctrine 3D
   04_VISION_PRODUIT_10_ANS.md        ← mission, workflow canonique, actes 1-5
+  06_REDESIGN_COURTLIGHT.md          ← langage visuel propriétaire (fait autorité sur le 03)
+  07_CONTRAT_DE_PARITE.md            ← matrice ancien ↔ nouveau (loi de parité)
+  08_CARTOGRAPHIE_TECHNIQUE.md       ← ★ STRUCTURE RÉELLE DE L'APP. À lire avant toute modif
+                                        structurelle, et à mettre à jour DANS LE MÊME COMMIT.
+  09_AUDIT_ET_ROADMAP.md             ← manques constatés + séquence L1-L7 avec critères de sortie
   CHANGELOG_IMPLEMENTATION.md        ← journal des modifs (À TENIR À JOUR à chaque session)
 supabase/
   migrations/001-008     ← schéma, RLS, moteur SQL (EMA/zones/z-score), seeds, RPC

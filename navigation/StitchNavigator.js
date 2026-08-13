@@ -9,6 +9,7 @@ import { doc, getDoc, getDocFromServer, setDoc, updateDoc, increment, serverTime
 import SplashScreen from "../src/components/SplashScreen";
 import { USE_SUPABASE } from "../src/lib/supabase";
 import { getSession as supaGetSession, onAuthChange as supaOnAuthChange, getMyMembership as supaGetMyMembership } from "../src/lib/ctpApi";
+import { ensurePushSubscriptionSynced, isPushOnboardingSkipped } from "../src/services/vapidPush";
 import CoachHomeSupabase from "../src/screens/CoachHomeSupabase";
 import AthleteHomeSupabase from "../src/screens/AthleteHomeSupabase";
 import ScheduleScreenSupabase from "../src/screens/ScheduleScreenSupabase";
@@ -38,9 +39,12 @@ import CoachTeamScreen from "../src/screens/CoachTeamScreen";
 import CoachProfileScreen from "../src/screens/CoachProfileScreen";
 import CoachScheduleScreen from "../src/screens/CoachScheduleScreen";
 import AthleteDetailScreen from "../src/screens/AthleteDetailScreen";
-import AdminTeamScreen from "../src/screens/AdminTeamScreen";
 import AdminTeamDetailScreen from "../src/screens/AdminTeamDetailScreen";
-import CreateTeamModal from "../src/screens/CreateTeamModal";
+import AdminSystemHealthScreen from "../src/screens/AdminSystemHealthScreen";
+// L4 : AdminTeamScreen et CreateTeamModal étaient enregistrés sans qu'aucun
+// navigate() ne les atteigne (CreateTeamModal écrivait en plus sur Firestore,
+// alors qu'AdminHomeScreen crée déjà les équipes via ctpApi.createTeam).
+// Fichiers conservés dans src/screens/ ; routes retirées.
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../services/firebaseConfig";
 
@@ -192,9 +196,12 @@ function AdminTabs() {
           ),
         }}
       />
+      {/* L4 : l'onglet « Teams » rendait AdminHomeScreen, exactement comme
+          AdminHome — deux onglets pour un seul écran. Supprimé : la liste des
+          équipes vit dans AdminHome, le détail dans AdminTeamDetailScreen. */}
       <AdminTab.Screen
-        name="Teams"
-        component={AdminHomeScreen}
+        name="Health"
+        component={AdminSystemHealthScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon name="Teams" color={color} size={size} focused={focused} />
@@ -329,13 +336,7 @@ function RootStackNavigator({ role, user, pendingDeepLink, navigationRef, onboar
           component={PerformanceDashboard}
           initialParams={{ role: "admin" }}
         />
-        <RootStack.Screen name="AdminTeamScreen" component={AdminTeamScreen} />
         <RootStack.Screen name="AdminTeamDetailScreen" component={AdminTeamDetailScreen} />
-        <RootStack.Screen
-          name="CreateTeamModal"
-          component={CreateTeamModal}
-          options={{ presentation: "modal", gestureEnabled: true }}
-        />
         <RootStack.Screen name="TeamDetails" component={TeamDetails} />
         <RootStack.Screen name="DevEventsProbe" component={DevEventsProbe} />
         <RootStack.Screen name="DebugTestQuestionnaire" component={DebugTestQuestionnaireScreen} />
@@ -476,13 +477,29 @@ function AuthGate({ pendingDeepLink, pendingJoinCode, navigationRef }) {
           console.warn("[SUPA] getMyMembership failed:", e?.message);
         }
         console.log("[SUPA] auth OK:", sessUser.email, "| role:", roleFromDb);
+
+        // ── L1 : onboarding push (doc 09 §3 P0-1) ──────────────────────────
+        // L'état d'onboarding n'est PAS un booléen stocké : c'est la réalité de
+        // l'appareil. Un athlète voit l'écran tant que ce navigateur n'a pas de
+        // souscription push valide — sauf s'il l'a explicitement passé.
+        // ensurePushSubscriptionSynced() ne demande aucune permission et répare
+        // au passage une ligne push_subscriptions manquante.
+        let onboardingComplete = true;
+        if (roleFromDb === "athlete") {
+          let subscribed = false;
+          try { subscribed = await ensurePushSubscriptionSynced(); }
+          catch (e) { console.warn("[SUPA] push sync failed:", e?.message); }
+          onboardingComplete = subscribed || isPushOnboardingSkipped();
+          console.log("[SUPA] push subscribed:", subscribed, "| onboardingComplete:", onboardingComplete);
+        }
+
         if (!done) setState({
           loading: false,
           user: { uid: sessUser.id, email: sessUser.email, displayName: sessUser.email },
           userRole: roleFromDb,
           authReady: true,
           roleLoading: false,
-          onboardingComplete: true,
+          onboardingComplete,
         });
       };
       supaGetSession().then(({ data }) => applyUser(data?.session?.user ?? null));

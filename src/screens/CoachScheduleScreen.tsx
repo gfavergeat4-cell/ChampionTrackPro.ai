@@ -1,14 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { Platform, View, Text } from "react-native";
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  orderBy,
-} from "firebase/firestore";
-import { auth, db } from "../lib/firebase";
+  getMyMembership,
+  getTeamMembers,
+  listSessions,
+  getResponsesForSessions,
+} from "../lib/ctpApi";
 import { useIsDesktop } from "../hooks/useIsDesktop";
 
 const BG = "#0A0F1E";
@@ -249,72 +246,61 @@ export default function CoachScheduleScreen() {
     (async () => {
       try {
         setLoading(true);
-        const user = auth.currentUser;
-        if (!user) throw new Error("Not authenticated");
 
-        const userSnap = await getDoc(doc(db, "users", user.uid));
-        const userData = (userSnap.data() as any) || {};
-        const tid: string | null = userData.teamId || null;
+        const membership: any = await getMyMembership();
+        const tid: string | null = membership?.team_id ?? null;
         if (!tid) throw new Error("No team linked to your account.");
 
-        // Load members
-        const membersSnap = await getDocs(collection(db, "teams", tid, "members"));
-        const memberList: { uid: string; name: string }[] = [];
-        await Promise.all(
-          membersSnap.docs.map(async (d) => {
-            const mData = d.data() as any;
-            let name = mData.fullName || mData.displayName || mData.name || d.id;
-            try {
-              const uSnap = await getDoc(doc(db, "users", d.id));
-              if (uSnap.exists()) {
-                const uData = uSnap.data() as any;
-                if (uData.fullName) name = uData.fullName;
-              }
-            } catch { /* ignore */ }
-            memberList.push({ uid: d.id, name });
-          })
-        );
+        // Fenêtre bornée : −60 j / +60 j. La table sessions peut contenir des
+        // milliers d'occurrences récurrentes ; tout charger ferait tomber l'écran.
+        const DAY = 86400000;
+        const fromISO = new Date(Date.now() - 60 * DAY).toISOString();
+        const toISO = new Date(Date.now() + 60 * DAY).toISOString();
 
-        // Load trainings
-        const trainingsSnap = await getDocs(
-          query(collection(db, "teams", tid, "trainings"), orderBy("startUtc", "desc"))
-        );
+        const [members, sessions] = await Promise.all([
+          getTeamMembers(tid),
+          listSessions(tid, fromISO, toISO),
+        ]);
 
-        const result: TrainingWithStats[] = [];
+        const memberList = (members as any[])
+          .filter((m) => m.role === "athlete")
+          .map((m) => ({
+            uid: m.user_id,
+            name: m.profiles?.display_name || m.pseudonym || "Player",
+          }));
 
-        await Promise.all(
-          trainingsSnap.docs.map(async (tDoc) => {
-            const tData = tDoc.data() as any;
-            const startUtc = toMs(tData.startUtc);
-            const endUtc = toMs(tData.endUtc) || startUtc;
+        const sessionRows = (sessions as any[]).filter((s) => !s.cancelled);
+        const responses = await getResponsesForSessions(sessionRows.map((s) => s.id));
 
-            const responsesSnap = await getDocs(
-              collection(db, "teams", tid, "trainings", tDoc.id, "responses")
-            );
-            const responseMap: Record<string, any> = {};
-            responsesSnap.docs.forEach((r) => { responseMap[r.id] = r.data(); });
+        // session_id -> user_id -> réponse
+        const bySession: Record<string, Record<string, any>> = {};
+        for (const r of responses as any[]) {
+          (bySession[r.session_id] ||= {})[r.user_id] = r;
+        }
 
-            const memberStatuses: MemberStatus[] = memberList.map((m) => {
-              const resp = responseMap[m.uid];
-              if (!resp) return { uid: m.uid, name: m.name, status: "pending" as const };
-              if (resp.worryFlag === true) return { uid: m.uid, name: m.name, status: "worry" as const };
-              if (resp.hasFriction === true) return { uid: m.uid, name: m.name, status: "friction" as const };
-              return { uid: m.uid, name: m.name, status: "completed" as const };
-            });
+        const result: TrainingWithStats[] = sessionRows.map((s) => {
+          const responseMap = bySession[s.id] ?? {};
+          const memberStatuses: MemberStatus[] = memberList.map((m) => {
+            const resp = responseMap[m.uid];
+            if (!resp) return { uid: m.uid, name: m.name, status: "pending" as const };
+            if (resp.worry_flag === true) return { uid: m.uid, name: m.name, status: "worry" as const };
+            if (resp.has_friction === true) return { uid: m.uid, name: m.name, status: "friction" as const };
+            return { uid: m.uid, name: m.name, status: "completed" as const };
+          });
 
-            const completed = memberStatuses.filter((s) => s.status !== "pending").length;
+          const startUtc = new Date(s.start_utc).getTime();
+          const endUtc = s.end_utc ? new Date(s.end_utc).getTime() : startUtc;
 
-            result.push({
-              id: tDoc.id,
-              title: tData.title || tData.name || "Training",
-              startUtc,
-              endUtc,
-              total: memberList.length,
-              completed,
-              memberStatuses,
-            });
-          })
-        );
+          return {
+            id: s.id,
+            title: s.title || "Training",
+            startUtc,
+            endUtc,
+            total: memberList.length,
+            completed: memberStatuses.filter((st) => st.status !== "pending").length,
+            memberStatuses,
+          };
+        });
 
         result.sort((a, b) => a.startUtc - b.startUtc);
 

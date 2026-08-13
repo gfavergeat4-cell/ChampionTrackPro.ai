@@ -77,3 +77,59 @@ export async function registerVapidPush(): Promise<boolean> {
   console.log("[VAPID] Subscription saved to Supabase");
   return true;
 }
+
+/**
+ * Vérifie si CE navigateur possède déjà une souscription push valide et, le cas
+ * échéant, la (re)pousse dans Supabase — l'upsert est idempotent, ce qui répare
+ * silencieusement une ligne `push_subscriptions` perdue.
+ *
+ * Ne demande JAMAIS de permission, ne déclenche aucune interaction : appelable
+ * au démarrage de l'app. Retourne true seulement si l'appareil est réellement
+ * abonné (permission accordée + souscription PushManager présente).
+ */
+export async function ensurePushSubscriptionSynced(): Promise<boolean> {
+  if (typeof window === "undefined" || Platform.OS !== "web") return false;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
+
+  try {
+    const reg = await navigator.serviceWorker.getRegistration("/");
+    if (!reg) return false;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return false;
+
+    const key = sub.getKey("p256dh");
+    const auth = sub.getKey("auth");
+    if (!key || !auth) return false;
+
+    await savePushSubscription({
+      endpoint: sub.endpoint,
+      p256dh: arrayBufToB64url(key),
+      authKey: arrayBufToB64url(auth),
+    });
+    return true;
+  } catch (e) {
+    console.warn("[VAPID] ensurePushSubscriptionSynced failed:", (e as any)?.message);
+    return false;
+  }
+}
+
+// Clé locale : l'athlète a explicitement passé l'écran d'onboarding push.
+// Sert uniquement à ne pas le lui réafficher à chaque ouverture ; la vérité
+// reste la présence d'une souscription (ensurePushSubscriptionSynced).
+export const PUSH_ONBOARDING_SKIPPED_KEY = "ctp_push_onboarding_skipped";
+
+export function isPushOnboardingSkipped(): boolean {
+  try {
+    return typeof window !== "undefined"
+      && window.localStorage?.getItem(PUSH_ONBOARDING_SKIPPED_KEY) === "1";
+  } catch { return false; }
+}
+
+export function markPushOnboardingSkipped(): void {
+  try { window.localStorage?.setItem(PUSH_ONBOARDING_SKIPPED_KEY, "1"); } catch { /* silent */ }
+}
+
+export function clearPushOnboardingSkipped(): void {
+  try { window.localStorage?.removeItem(PUSH_ONBOARDING_SKIPPED_KEY); } catch { /* silent */ }
+}

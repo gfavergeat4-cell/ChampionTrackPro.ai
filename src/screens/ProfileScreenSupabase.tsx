@@ -8,6 +8,11 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { CommonActions } from "@react-navigation/native";
 import { getMyProfile, updateMyProfile, signOut } from "../lib/ctpApi";
+import {
+  registerVapidPush,
+  ensurePushSubscriptionSynced,
+  clearPushOnboardingSkipped,
+} from "../services/vapidPush";
 import { courtlight as cl } from "../theme/tokens";
 
 // ── Skeleton (doc 06 section 6) ──
@@ -109,6 +114,9 @@ export default function ProfileScreenSupabase() {
   const [editing, setEditing] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [notifPermission, setNotifPermission] = React.useState("default");
+  // Permission accordée ≠ abonné : c'est la souscription qui fait foi (doc 09 §3 P0-1)
+  const [notifSubscribed, setNotifSubscribed] = React.useState(false);
+  const [notifBusy, setNotifBusy] = React.useState(false);
 
   // Profile data
   const [email, setEmail] = React.useState("");
@@ -159,9 +167,15 @@ export default function ProfileScreenSupabase() {
     const check = () => {
       if (typeof Notification === "undefined") {
         setNotifPermission("denied");
+        setNotifSubscribed(false);
         return;
       }
       setNotifPermission(Notification.permission);
+      // Vérifie la souscription réelle de CE navigateur et répare la ligne
+      // push_subscriptions si elle manque (upsert idempotent, sans permission).
+      ensurePushSubscriptionSynced()
+        .then(setNotifSubscribed)
+        .catch(() => setNotifSubscribed(false));
     };
 
     check();
@@ -217,11 +231,23 @@ export default function ProfileScreenSupabase() {
     }
   };
 
-  // ── Request notification permission ──
+  // ── Activer les notifications (porte de rattrapage — doc 09 §3 P0-1) ──
+  // Demander la permission ne suffit pas : il faut souscrire au PushManager
+  // et enregistrer la souscription dans Supabase, sinon aucun push ne partira.
   const requestNotifPermission = async () => {
-    if (typeof Notification === "undefined") return;
-    const result = await Notification.requestPermission();
-    setNotifPermission(result);
+    if (typeof Notification === "undefined" || notifBusy) return;
+    setNotifBusy(true);
+    try {
+      const ok = await registerVapidPush();
+      setNotifSubscribed(ok);
+      setNotifPermission(Notification.permission);
+      if (ok) clearPushOnboardingSkipped();
+    } catch (e) {
+      console.warn("[PROFILE][SUPA] push registration failed:", (e as any)?.message);
+      setNotifPermission(Notification.permission);
+    } finally {
+      setNotifBusy(false);
+    }
   };
 
   // ── Render ──
@@ -339,7 +365,7 @@ export default function ProfileScreenSupabase() {
         <View style={s.card}>
           <Text style={s.miniLabel}>NOTIFICATIONS</Text>
 
-          {notifPermission === "granted" ? (
+          {notifSubscribed ? (
             <View style={s.notifRow}>
               <View style={[s.notifDot, { backgroundColor: "#00FF9D" }]} />
               <View style={{ flex: 1 }}>
@@ -347,6 +373,16 @@ export default function ProfileScreenSupabase() {
                 <Text style={s.notifDetail}>You'll be alerted after each session.</Text>
               </View>
             </View>
+          ) : notifPermission === "granted" ? (
+            <Pressable onPress={requestNotifPermission} style={s.notifRow}>
+              <View style={[s.notifDot, { backgroundColor: cl.zone.YELLOW }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.notifStatus, { color: cl.zone.YELLOW }]}>
+                  {notifBusy ? "Finishing setup…" : "Almost there - Tap to finish setup"}
+                </Text>
+                <Text style={s.notifDetail}>Permission granted, but this device isn't registered yet.</Text>
+              </View>
+            </Pressable>
           ) : notifPermission === "denied" ? (
             <View style={s.notifRow}>
               <View style={[s.notifDot, { backgroundColor: cl.zone.YELLOW }]} />
@@ -362,7 +398,9 @@ export default function ProfileScreenSupabase() {
             >
               <View style={[s.notifDot, { backgroundColor: "#EF4444" }]} />
               <View style={{ flex: 1 }}>
-                <Text style={[s.notifStatus, { color: "#EF4444" }]}>Inactive - Tap to enable</Text>
+                <Text style={[s.notifStatus, { color: "#EF4444" }]}>
+                  {notifBusy ? "Enabling…" : "Inactive - Tap to enable"}
+                </Text>
                 <Text style={s.notifDetail}>You won't receive session alerts.</Text>
               </View>
             </Pressable>

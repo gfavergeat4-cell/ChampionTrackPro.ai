@@ -2,15 +2,10 @@ import React, { useEffect, useState } from "react";
 import { Platform, ActivityIndicator, View, Text } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  orderBy,
-  limit,
-} from "firebase/firestore";
-import { auth, db } from "../lib/firebase";
+  getMyMembership,
+  getTeamMembers,
+  getTeamLatestSessionResponses,
+} from "../lib/ctpApi";
 import { useIsDesktop } from "../hooks/useIsDesktop";
 
 interface Athlete {
@@ -46,76 +41,46 @@ export default function CoachTeamScreen() {
     (async () => {
       try {
         setLoading(true);
-        const user = auth.currentUser;
-        if (!user) throw new Error("Not authenticated");
 
-        // Get coach's teamId
-        const userSnap = await getDoc(doc(db, "users", user.uid));
-        const userData = (userSnap.data() as any) || {};
-        const tid: string | null = userData.teamId || null;
+        // ── Équipe du coach ──────────────────────────────────────────────
+        const membership: any = await getMyMembership();
+        const tid: string | null = membership?.team_id ?? null;
         if (!tid) throw new Error("No team linked to your account.");
-        if (!cancelled) setTeamId(tid);
+        if (!cancelled) {
+          setTeamId(tid);
+          setTeamName(membership?.teams?.name || tid);
+        }
 
-        // Get team name
-        const teamSnap = await getDoc(doc(db, "teams", tid));
-        const teamData = (teamSnap.data() as any) || {};
-        if (!cancelled) setTeamName(teamData.name || tid);
+        // ── Roster + réponses de la dernière séance terminée ─────────────
+        const [members, latest] = await Promise.all([
+          getTeamMembers(tid),
+          getTeamLatestSessionResponses(tid),
+        ]);
 
-        // Get members
-        const membersSnap = await getDocs(collection(db, "teams", tid, "members"));
-        const memberList: { uid: string; name: string }[] = [];
-        await Promise.all(
-          membersSnap.docs.map(async (d) => {
-            const mData = d.data() as any;
-            let name = mData.displayName || mData.name || mData.fullName || d.id;
-            let position = mData.position || "";
-            let jerseyNumber: number | undefined = mData.jerseyNumber != null ? Number(mData.jerseyNumber) : undefined;
-            // Enrich from users/{uid}
-            try {
-              const uSnap = await getDoc(doc(db, "users", d.id));
-              if (uSnap.exists()) {
-                const uData = uSnap.data() as any;
-                if (uData.fullName) name = uData.fullName;
-                if (uData.position) position = uData.position;
-                if (uData.jerseyNumber != null) jerseyNumber = Number(uData.jerseyNumber);
-              }
-            } catch { /* ignore */ }
-            memberList.push({ uid: d.id, name, position, jerseyNumber } as any);
-          })
-        );
+        const memberList = (members as any[])
+          .filter((m) => m.role === "athlete")
+          .map((m) => ({
+            uid: m.user_id,
+            name: m.profiles?.display_name || m.pseudonym || "Player",
+            position: m.position || "",
+            jerseyNumber: m.jersey_number != null ? Number(m.jersey_number) : undefined,
+          }));
 
-        // Get last training
-        let lastTrainingId: string | null = null;
-        try {
-          const lastSnap = await getDocs(
-            query(collection(db, "teams", tid, "trainings"), orderBy("startUtc", "desc"), limit(1))
-          );
-          if (!lastSnap.empty) lastTrainingId = lastSnap.docs[0].id;
-        } catch { /* ignore */ }
-
-        // Get responses for last training
+        // Détection « at-risk » — mêmes seuils que la V1 (loi de parité) :
+        // worry_flag, readiness < 40, friction_impact > 70.
         const respondedUids = new Set<string>();
         const worryUids = new Set<string>();
         const frictionUids = new Set<string>();
-        if (lastTrainingId) {
-          try {
-            const respSnap = await getDocs(
-              collection(db, "teams", tid, "trainings", lastTrainingId, "responses")
-            );
-            respSnap.docs.forEach((d) => {
-              respondedUids.add(d.id);
-              const data = d.data() as any;
-              // V3 at-risk detection
-              if (data.worryFlag === true) {
-                worryUids.add(d.id);
-              } else if (
-                (typeof data.readinessScore === "number" && data.readinessScore < 40) ||
-                (typeof data.frictionImpact === "number" && data.frictionImpact > 70)
-              ) {
-                frictionUids.add(d.id);
-              }
-            });
-          } catch { /* ignore */ }
+        for (const r of latest.responses as any[]) {
+          respondedUids.add(r.user_id);
+          if (r.worry_flag === true) {
+            worryUids.add(r.user_id);
+          } else if (
+            (typeof r.readiness_score === "number" && r.readiness_score < 40) ||
+            (typeof r.friction_impact === "number" && r.friction_impact > 70)
+          ) {
+            frictionUids.add(r.user_id);
+          }
         }
 
         // Build athlete list with status

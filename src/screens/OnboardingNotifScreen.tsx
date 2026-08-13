@@ -4,7 +4,7 @@ import { doc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 import { registerWebPushTokenForCurrentUser } from "../services/webNotifications";
 import { USE_SUPABASE } from "../lib/supabase";
-import { registerVapidPush } from "../services/vapidPush";
+import { registerVapidPush, markPushOnboardingSkipped } from "../services/vapidPush";
 
 type Platform_ = "android" | "ios-safari" | "ios-pwa";
 
@@ -20,7 +20,14 @@ function detectPlatform(): Platform_ {
   return isStandalone ? "ios-pwa" : "ios-safari";
 }
 
+/**
+ * Chemin Firebase : booléen persisté sur le document utilisateur.
+ * Chemin Supabase : l'onboarding n'est PAS un booléen — l'écran disparaît dès
+ * que ce navigateur possède une souscription push (cf. AuthGate). On ne marque
+ * localement que le renoncement explicite, via markSkipped().
+ */
 async function markOnboardingComplete() {
+  if (USE_SUPABASE) return;
   const uid = auth.currentUser?.uid;
   if (!uid) return;
   try {
@@ -28,6 +35,11 @@ async function markOnboardingComplete() {
   } catch (e) {
     console.warn("[Onboarding] markOnboardingComplete failed:", e);
   }
+}
+
+async function markSkipped() {
+  if (USE_SUPABASE) markPushOnboardingSkipped();
+  else await markOnboardingComplete();
 }
 
 interface Props {
@@ -51,18 +63,28 @@ export default function OnboardingNotifScreen({ onComplete }: Props) {
   }, [platform]);
 
   const requestAndRegister = async () => {
+    // Navigateur sans API Notification : ne pas bloquer l'athlète.
     if (typeof Notification === "undefined") {
-      await markOnboardingComplete();
+      await markSkipped();
       onComplete();
       return;
     }
+    // registerVapidPush() demande lui-même la permission puis souscrit et
+    // enregistre dans Supabase. On ne sort de l'écran que si la souscription
+    // a réellement abouti — sinon la chaîne de notifications resterait morte.
+    if (USE_SUPABASE) {
+      let ok = false;
+      try { ok = await registerVapidPush(); }
+      catch (e) { console.warn("[Onboarding] registerVapidPush failed:", (e as any)?.message); }
+      setPermResult(typeof Notification !== "undefined" ? Notification.permission : null);
+      if (ok) { onComplete(); return; }
+      return; // reste sur l'écran : retry ou skip
+    }
+
     const result = await Notification.requestPermission();
     setPermResult(result);
     if (result === "granted") {
-      try {
-        if (USE_SUPABASE) { await registerVapidPush(); }
-        else { await registerWebPushTokenForCurrentUser(); }
-      } catch (e) { /* silent */ }
+      try { await registerWebPushTokenForCurrentUser(); } catch (e) { /* silent */ }
       await markOnboardingComplete();
       onComplete();
     }
@@ -73,7 +95,7 @@ export default function OnboardingNotifScreen({ onComplete }: Props) {
     const next = skipCount + 1;
     setSkipCount(next);
     if (next >= 2) {
-      await markOnboardingComplete();
+      await markSkipped();
       onComplete();
     }
     // after first skip show message; second skip exits
