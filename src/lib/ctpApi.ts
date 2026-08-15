@@ -81,6 +81,7 @@ export async function submitResponse(p: {
   teamId: string; sessionId: string; questionnaireId: string;
   metrics: Record<string, number>;
   hasFriction?: boolean; frictionType?: string | null;
+  frictionArea?: string | null; frictionImpact?: number | null;
   worryLevel?: number | null; isTest?: boolean;
 }) {
   const { data: { user } } = await db().auth.getUser();
@@ -89,11 +90,42 @@ export async function submitResponse(p: {
     team_id: p.teamId, session_id: p.sessionId, user_id: user.id,
     questionnaire_id: p.questionnaireId, metrics: p.metrics,
     has_friction: p.hasFriction ?? false, friction_type: p.frictionType ?? null,
+    friction_area: p.frictionArea ?? null,
+    friction_impact: p.frictionImpact ?? null,
     worry_level: p.worryLevel ?? null,
     worry_flag: (p.worryLevel ?? 0) > 70, is_test: p.isTest ?? false,
   });
   if (error) throw error;
   return { ok: true };
+}
+
+/**
+ * Résout le questionnaire à servir pour une séance donnée (doc 15 §3).
+ * Priorité : questionnaire de l'équipe dont `session_type` correspond au type
+ * de la séance → sinon celui de type 'any' → sinon le premier disponible.
+ * Une équipe peut donc être reliée à plusieurs questionnaires.
+ */
+export async function getQuestionnaireForSession(teamId: string, sessionType?: string | null) {
+  const { data } = await db().from("team_questionnaires")
+    .select("questionnaires(*)").eq("team_id", teamId);
+  const list = (data ?? [])
+    .map((r: any) => r.questionnaires)
+    .filter(Boolean)
+    .filter((q: any) => !q.is_archived);
+  if (!list.length) return null;
+  return (
+    list.find((q: any) => sessionType && q.session_type === sessionType) ??
+    list.find((q: any) => q.session_type === "any") ??
+    list[0]
+  );
+}
+
+/** Une seule séance, par identifiant. (getSession est déjà pris par l'auth) */
+export async function getSessionById(sessionId: string) {
+  const { data } = await db().from("sessions")
+    .select("id, team_id, title, session_type, start_utc, end_utc")
+    .eq("id", sessionId).maybeSingle();
+  return data;
 }
 
 export async function getMyResponseForSession(sessionId: string) {

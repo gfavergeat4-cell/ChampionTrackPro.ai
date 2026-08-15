@@ -239,3 +239,66 @@ Rendu **non modifié** (loi de parité) : seuls les chargements de données ont 
 1. `supabase db push` (applique la migration 010).
 2. `npm run web:build` pour valider le bundle localement.
 3. Vérifications de terrain V2 à V5 listées dans `docs/09_AUDIT_ET_ROADMAP.md §10` — la plus importante : recevoir une vraie notification sur un vrai téléphone.
+
+### Bloc 10bis — Validation terrain de L1 et deux correctifs (31 juillet 2026)
+
+**✅ Critère de sortie L1 ATTEINT.** Première notification push jamais reçue par ce système : séance test (`end_utc = now() − 1 min`) → `session-watcher` → notification affichée sur l'appareil → `notified_at` rempli → deux relances programmées (+3 h, +6 h), conformes aux timings de l'ancienne version.
+
+#### Correctif 1 — `011_push_subscriptions_update_policy.sql`
+`savePushSubscription()` fait un upsert ; PostgREST le traduit en `INSERT ... ON CONFLICT DO UPDATE`, qui exige une policy **UPDATE**. La migration 009 n'avait créé que SELECT / INSERT / DELETE.
+- Symptôme : le premier abonnement d'un appareil passe (insertion pure), toute re-synchronisation renvoie 403 « new row violates row-level security policy (USING expression) ».
+- **Portée réelle du bug, au-delà du blocage constaté** : les endpoints push expirent et doivent être rafraîchis. Sans policy UPDATE, le rafraîchissement échouait silencieusement — les athlètes auraient cessé de recevoir des notifications au bout de quelques semaines, sans aucune erreur visible.
+
+#### Correctif 2 — robustesse de l'activation (`vapidPush.ts`, `OnboardingNotifScreen.tsx`)
+- `registerVapidPush()` réutilise la souscription existante de l'appareil au lieu d'appeler `subscribe()` en aveugle (qui échoue si une souscription est déjà en place) ; désabonnement puis nouvelle souscription en dernier recours.
+- `ensurePushSubscriptionSynced()` attend `serviceWorker.ready` (borné à 3 s) puis retombe sur `getRegistrations()` — au démarrage à froid, `getRegistration()` répondait avant l'activation du SW et réaffichait l'onboarding à un athlète déjà abonné.
+- `OnboardingNotifScreen` : états `busy` / `regFailed`, message d'échec explicite et bouton **Continue anyway**. L'athlète n'est jamais piégé sur l'écran de permission.
+
+#### Environnement
+- `EXPO_PUBLIC_VAPID_PUBLIC_KEY` doit être déclarée dans les variables d'environnement Vercel du projet `champion-track-pro-ai` : les variables `EXPO_PUBLIC_*` sont figées à la compilation, un redeploy sans rebuild ne les prend pas.
+- Fichier `nul` supprimé (nom réservé Windows, bloquait `git add`) et ajouté au `.gitignore`.
+- `supabase db push` ne détecte pas les migrations nommées sans horodatage : 010 et 011 ont été appliquées manuellement via le SQL editor.
+
+### Bloc 11 — Questionnaire NCAA Basketball : moteur + écran (31 juillet 2026)
+
+Implémentation du doc 15 v3 (méthode DAR, Stéphane Morin). **Rien n'est activé** : les questionnaires sont créés mais non reliés aux équipes, le questionnaire actuel reste en service jusqu'à décision du fondateur.
+
+#### Migration 012 — Questionnaires
+- Colonne `responses.friction_area` (zone corporelle, vocabulaire figé).
+- **5 questionnaires** : `tpl-bball-effort-full` (practice, 8 items), `tpl-bball-effort-game` (**items copiés à l'identique** depuis practice, par requête SQL — la comparabilité entraînement/compétition ne peut pas dépendre d'une recopie manuelle), `tpl-bball-effort-sc` (conditioning, 5 items, technique et tactique retirées), `tpl-bball-effort-skill` (4 items), `tpl-bball-daily` (bloc journalier : sommeil, drive, confiance, énergie du groupe, clarté du rôle, charge académique).
+- Champs ajoutés à chaque item : `role` (cost/state/context) et `axis` (PHY/TEC/MEN/REC/SOC/ACA/CTX) — le moteur ne devine plus rien.
+- **Trigger `check_questionnaire_weights`** : refuse tout questionnaire dont les poids ne somment pas à 1.0. Un questionnaire mal pondéré produit un score faux que personne ne remarque.
+- Poids renormalisés par variante : sans cela, une séance de musculation produirait mécaniquement un coût plus faible qu'une practice — un artefact, pas une mesure.
+
+#### Migration 013 — Moteur de charge
+- **`session_load` et `workload_au` enfin calculés** (trigger `responses_readiness_load`). Ces colonnes n'avaient jamais été alimentées, ce qui rendait `acwr` systématiquement nul depuis l'origine du projet. `session_load = readiness_score / 10` (échelle CR-10), `workload_au = session_load × durée réelle de la séance`.
+  - ⚠ Nom du trigger choisi pour l'ordre alphabétique d'exécution : `responses_readiness` doit passer avant `responses_readiness_load`, sinon `readiness_score` serait encore NULL.
+  - Garde-fou : ne calcule que si le questionnaire porte des items `role = "cost"`. Un questionnaire hérité mesure un état, le convertir en charge serait un contresens.
+- **`v_response_axes` / `v_daily_axes`** : sous-scores PHY / TEC / MEN / ACA calculés depuis les axes déclarés, inversion de valence appliquée côté serveur (invisible pour l'athlète, DAR partie 2 §E.2). NULL propagé si l'axe n'a pas été mesuré — jamais remplacé par 0.
+- Colonne `daily_metrics.sub_aca` (charge académique, hors charge sportive).
+- **`v_specificity`** : rapport exigence entraînement / exigence match par axe, sur 56 jours, **calculé par athlète** — DAR proscrit la normalisation interindividuelle.
+- `compute-metrics` alimente désormais `sub_phy` / `sub_tec` / `sub_men` / `sub_aca`.
+
+#### Écran de check-in — `src/screens/QuestionnaireCourtlight.tsx` (469 l., nouveau)
+Rendu conforme au modèle visuel fourni : en-tête de séance avec halo, cartes `#141A24` rayon 16 avec liseré cyan interne, libellé 18 px + explication 14 px, cascade 50 ms par carte, porte d'entrée douleur en deux boutons, Submit en dégradé avec glow.
+- **Entièrement piloté par la donnée** : aucun libellé en dur. Changer le questionnaire en base change l'écran.
+- Résolution du questionnaire **par type de séance** (`getQuestionnaireForSession`), avec repli sur l'ancien comportement.
+- Bloc douleur affiché si le questionnaire est journalier **ou** hérité — le signal n'est jamais perdu pendant la transition.
+- Soumission bloquée tant que chaque curseur n'a pas été touché : sans cela, un athlète pressé valide 50 partout et empoisonne sa propre baseline.
+
+#### Composant de marque — `src/components/LogoSlider.tsx` (164 l., nouveau)
+**Le curseur EST l'emblème.** Géométrie et dégradés relevés sur `logo_ctp_embleme.svg` et `logo-191-v2.png` : rail 12 px (ratio 64/500 du logo), orbe 22 px (1,81 × la hauteur du rail, ratio exact du logo), dégradé de rail `#8CEFE0 → #4FC9F2 → #3D8BF7 → #2E5BF6`, orbe en dégradé radial `#FFFFFF → #DFF6FF → #8ED9FF → #4FB4F2 → #3E9BE8`.
+- Le rail reste **entièrement coloré** quelle que soit la position : c'est ce qui préserve la lecture « emblème » plutôt que « barre de progression ».
+- État non touché : rail désaturé, orbe grise qui respire. Répond au biais de centralité signalé par DAR — un curseur pré-positionné au centre fabrique des réponses médianes.
+
+#### Couche d'accès
+`submitResponse` accepte `frictionArea` et `frictionImpact` ; ajout de `getQuestionnaireForSession` et `getSessionById` (renommé : `getSession` était déjà pris par l'auth).
+
+#### Vérifications
+Parsing Babel des 5 fichiers touchés : OK. Graphe d'imports depuis `index.js` : 75 fichiers, zéro import cassé, les deux nouveaux fichiers atteignables.
+
+#### Action requise — Gabin
+1. Appliquer 012 et 013 dans le SQL editor (le CLI ne détecte pas les migrations sans horodatage).
+2. `npm run web:build`, puis commit et push.
+3. **Décider de la bascule** : tant que `team_questionnaires` n'est pas modifié, rien ne change pour l'équipe pilote. Le bloc SQL de bascule est commenté en fin de migration 012.
+4. Les 9 décisions du doc 15 §12 restent ouvertes — notamment zones ±10 points vs ±15 %, et moyenne d'équipe vs distribution.

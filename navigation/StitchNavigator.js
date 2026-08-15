@@ -29,6 +29,7 @@ import HomeScreen from "../screens/StitchHomeScreenClean";
 import ScheduleScreen from "../screens/StitchScheduleScreen";
 import ProfileScreen from "../screens/StitchProfileScreen";
 import QuestionnaireScreen from "../screens/StitchQuestionnaireScreen";
+import QuestionnaireCourtlight from "../src/screens/QuestionnaireCourtlight";
 import TeamDetails from "../screens/StitchTeamDetails";
 import DevEventsProbe from "../screens/DevEventsProbe";
 import DebugTestQuestionnaireScreen from "../screens/DebugTestQuestionnaireScreen";
@@ -342,7 +343,7 @@ function RootStackNavigator({ role, user, pendingDeepLink, navigationRef, onboar
         <RootStack.Screen name="DebugTestQuestionnaire" component={DebugTestQuestionnaireScreen} />
         <RootStack.Screen 
           name="Questionnaire" 
-          component={QuestionnaireScreen}
+          component={USE_SUPABASE ? QuestionnaireCourtlight : QuestionnaireScreen}
           options={{
             presentation: "modal",
             gestureEnabled: true,
@@ -361,7 +362,7 @@ function RootStackNavigator({ role, user, pendingDeepLink, navigationRef, onboar
         <RootStack.Screen name="DebugTestQuestionnaire" component={DebugTestQuestionnaireScreen} />
         <RootStack.Screen 
           name="Questionnaire" 
-          component={QuestionnaireScreen}
+          component={USE_SUPABASE ? QuestionnaireCourtlight : QuestionnaireScreen}
           options={{
             presentation: "modal",
             gestureEnabled: true,
@@ -383,7 +384,7 @@ function RootStackNavigator({ role, user, pendingDeepLink, navigationRef, onboar
         <RootStack.Screen name="DebugTestQuestionnaire" component={DebugTestQuestionnaireScreen} />
         <RootStack.Screen
           name="Questionnaire"
-          component={QuestionnaireScreen}
+          component={USE_SUPABASE ? QuestionnaireCourtlight : QuestionnaireScreen}
           options={{
             presentation: "modal",
             gestureEnabled: true,
@@ -400,7 +401,7 @@ function RootStackNavigator({ role, user, pendingDeepLink, navigationRef, onboar
       <RootStack.Screen name="DebugTestQuestionnaire" component={DebugTestQuestionnaireScreen} />
       <RootStack.Screen 
         name="Questionnaire" 
-        component={QuestionnaireScreen}
+        component={USE_SUPABASE ? QuestionnaireCourtlight : QuestionnaireScreen}
         options={{
           presentation: "modal",
           gestureEnabled: true,

@@ -21,6 +21,14 @@ Deno.serve(async (req) => {
   const m = engine?.[0];
   if (!m) return new Response("no data", { status: 200 });
 
+  // 1bis) Sous-scores par axe (doc 15 §6) — lus depuis v_daily_axes, qui
+  //       applique les axes et les inversions déclarés dans le questionnaire.
+  //       NULL si l'axe n'a pas été mesuré ce jour-là : on ne fabrique pas
+  //       une donnée absente, et surtout on ne la remplace pas par un zéro.
+  const { data: axes } = await supa
+    .from("v_daily_axes").select("sub_phy, sub_tec, sub_men, sub_aca")
+    .eq("user_id", user_id).eq("day", m.day).maybeSingle();
+
   // upsert daily_metrics (source de vérité historisée)
   await supa.from("daily_metrics").upsert({
     user_id, team_id, day: m.day,
@@ -28,6 +36,10 @@ Deno.serve(async (req) => {
     deviation_pct: m.deviation_pct, zone: m.zone,
     workload_au: m.workload_au, acwr: m.acwr, data_days: m.data_days,
     z_score: m.z_score ?? null, mean_28: m.mean_28 ?? null, sd_28: m.sd_28 ?? null,
+    sub_phy: axes?.sub_phy ?? null,
+    sub_tec: axes?.sub_tec ?? null,
+    sub_men: axes?.sub_men ?? null,
+    sub_aca: axes?.sub_aca ?? null,
   });
 
   // 2) RÈGLES — n'évalue QUE les règles activées par Gabin (enabled=true).
