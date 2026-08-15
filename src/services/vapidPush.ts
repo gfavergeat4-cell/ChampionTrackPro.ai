@@ -54,12 +54,33 @@ export async function registerVapidPush(): Promise<boolean> {
   await navigator.serviceWorker.ready;
   console.log("[VAPID] SW registered");
 
-  // Subscribe
-  const sub = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(VAPID_KEY),
-  });
-  console.log("[VAPID] Push subscription obtained");
+  // Subscribe — réutiliser la souscription existante si l'appareil en a déjà une.
+  // subscribe() lève InvalidStateError si une souscription existe avec une autre
+  // applicationServerKey ; dans ce cas on désabonne puis on resouscrit.
+  let sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    console.log("[VAPID] Existing subscription reused");
+  } else {
+    try {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_KEY),
+      });
+    } catch (e) {
+      console.warn("[VAPID] subscribe failed, retrying after unsubscribe:", (e as any)?.message);
+      const stale = await reg.pushManager.getSubscription();
+      if (stale) await stale.unsubscribe().catch(() => {});
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_KEY),
+      });
+    }
+    console.log("[VAPID] Push subscription obtained");
+  }
+  if (!sub) {
+    console.error("[VAPID] No subscription after subscribe()");
+    return false;
+  }
 
   const key = sub.getKey("p256dh");
   const auth = sub.getKey("auth");
@@ -93,7 +114,20 @@ export async function ensurePushSubscriptionSynced(): Promise<boolean> {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
 
   try {
-    const reg = await navigator.serviceWorker.getRegistration("/");
+    // Au démarrage à froid, getRegistration() peut répondre avant que le SW ne
+    // soit actif : faux négatif qui réaffiche l'onboarding à un athlète déjà
+    // abonné. On attend `ready`, borné à 3 s pour ne pas retarder l'app.
+    let reg = await navigator.serviceWorker.getRegistration("/");
+    if (!reg) {
+      reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<undefined>((r) => setTimeout(() => r(undefined), 3000)),
+      ]) as ServiceWorkerRegistration | undefined;
+    }
+    if (!reg) {
+      const all = await navigator.serviceWorker.getRegistrations();
+      reg = all.find((r) => r.pushManager);
+    }
     if (!reg) return false;
     const sub = await reg.pushManager.getSubscription();
     if (!sub) return false;

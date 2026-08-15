@@ -51,6 +51,8 @@ export default function OnboardingNotifScreen({ onComplete }: Props) {
   const [step, setStep] = useState<"main" | "ios-install">("main");
   const [skipCount, setSkipCount] = useState(0);
   const [permResult, setPermResult] = useState<NotificationPermission | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [regFailed, setRegFailed] = useState(false);
   const [pulsing, setPulsing] = useState(true);
 
   useEffect(() => {
@@ -73,12 +75,18 @@ export default function OnboardingNotifScreen({ onComplete }: Props) {
     // enregistre dans Supabase. On ne sort de l'écran que si la souscription
     // a réellement abouti — sinon la chaîne de notifications resterait morte.
     if (USE_SUPABASE) {
+      if (busy) return;
+      setBusy(true);
       let ok = false;
       try { ok = await registerVapidPush(); }
       catch (e) { console.warn("[Onboarding] registerVapidPush failed:", (e as any)?.message); }
+      setBusy(false);
       setPermResult(typeof Notification !== "undefined" ? Notification.permission : null);
       if (ok) { onComplete(); return; }
-      return; // reste sur l'écran : retry ou skip
+      // Échec : on ne piège JAMAIS l'athlète sur cet écran. Il peut continuer,
+      // et réactiver plus tard depuis son profil.
+      setRegFailed(true);
+      return;
     }
 
     const result = await Notification.requestPermission();
@@ -279,10 +287,28 @@ export default function OnboardingNotifScreen({ onComplete }: Props) {
         </>
       ) : (
         <>
-          <button style={s.btn} onClick={requestAndRegister}>
-            Enable Notifications
+          <button
+            style={{ ...s.btn, opacity: busy ? 0.6 : 1, cursor: busy ? "default" : "pointer" }}
+            onClick={requestAndRegister}
+            disabled={busy}
+          >
+            {busy ? "Setting up…" : regFailed ? "Try again" : "Enable Notifications"}
           </button>
-          {skipCount > 0 && (
+          {regFailed && (
+            <>
+              <div style={{ ...s.denied, marginBottom: "12px" }}>
+                We couldn't finish setting up notifications on this device. You can
+                continue and enable them later from your Profile.
+              </div>
+              <button
+                style={{ ...s.btn, background: "rgba(255,255,255,0.08)" }}
+                onClick={async () => { await markSkipped(); onComplete(); }}
+              >
+                Continue anyway
+              </button>
+            </>
+          )}
+          {skipCount > 0 && !regFailed && (
             <div style={{ ...s.denied, marginBottom: "12px" }}>
               You can always enable this later in your Profile.
             </div>
