@@ -87,7 +87,7 @@ begin
     elsif dow = 6 then
       insert into sessions (team_id, title, session_type, start_utc, end_utc)
       values ('b0000000-0000-4000-8000-000000000001', 'Game', 'game',
-              d + time '23:00', d + time '25:00')
+              d + time '19:30', d + time '19:30' + interval '2 hours')
       on conflict do nothing;
     end if;
   end loop;
