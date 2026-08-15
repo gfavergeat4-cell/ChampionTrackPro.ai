@@ -118,25 +118,35 @@ const CSS = `
 }
 .ctp-slider:focus-visible { box-shadow: 0 0 0 3px rgba(148, 250, 252, 0.45), 0 0 22px rgba(87,200,255,0.4); }
 
-/* Non touché : l'emblème est éteint. Le rail perd sa saturation, l'orbe
-   respire en attendant le geste. DAR §E : un curseur déjà positionné au
-   centre fabrique des réponses médianes. */
+/* Non touché. L'emblème garde SES couleurs — un composant de marque ne doit
+   jamais avoir l'air cassé. Le signal « pas encore répondu » passe par un
+   anneau blanc qui pulse autour de l'orbe, pas par une désaturation du rail.
+   DAR §E : pas de position de départ affirmée, donc pas de biais de centralité. */
 .ctp-slider.ctp-untouched {
-  filter: saturate(0.28) brightness(0.62);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+  opacity: 0.82;
+  box-shadow:
+    0 0 10px rgba(87, 200, 255, 0.18),
+    0 3px 12px rgba(30, 75, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 .ctp-slider.ctp-untouched::-webkit-slider-thumb {
-  background: radial-gradient(circle at 40% 34%, #F2F7FA 0%, #C3D2DC 42%, #8A9BAA 74%, #6E8395 100%);
-  box-shadow: 0 0 10px 2px rgba(170, 200, 220, 0.30), 0 2px 4px rgba(0,0,0,0.45);
-  animation: ctp-thumb-breathe 2.6s ease-in-out infinite;
+  background: var(--ctp-orb);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.75),
+    0 0 12px 3px rgba(148, 250, 252, 0.35),
+    0 2px 5px rgba(0, 20, 60, 0.5);
+  animation: ctp-thumb-await 2.2s ease-in-out infinite;
 }
 .ctp-slider.ctp-untouched::-moz-range-thumb {
-  background: radial-gradient(circle at 40% 34%, #F2F7FA 0%, #C3D2DC 42%, #8A9BAA 74%, #6E8395 100%);
-  box-shadow: 0 0 10px 2px rgba(170, 200, 220, 0.30), 0 2px 4px rgba(0,0,0,0.45);
+  background: var(--ctp-orb);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.75),
+    0 0 12px 3px rgba(148, 250, 252, 0.35),
+    0 2px 5px rgba(0, 20, 60, 0.5);
 }
-@keyframes ctp-thumb-breathe {
-  0%, 100% { box-shadow: 0 0 8px 2px rgba(170, 200, 220, 0.25), 0 2px 4px rgba(0,0,0,0.45); }
-  50%      { box-shadow: 0 0 16px 5px rgba(170, 200, 220, 0.50), 0 2px 4px rgba(0,0,0,0.45); }
+@keyframes ctp-thumb-await {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.75), 0 0 10px 2px rgba(148,250,252,0.30), 0 2px 5px rgba(0,20,60,0.5); }
+  50%      { box-shadow: 0 0 0 3px rgba(255,255,255,0.95), 0 0 22px 7px rgba(148,250,252,0.55), 0 2px 5px rgba(0,20,60,0.5); }
 }
 
 @media (prefers-reduced-motion: reduce) {
