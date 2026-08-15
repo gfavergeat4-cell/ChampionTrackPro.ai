@@ -225,12 +225,43 @@ function parseIcs(text: string, wStart: number, wEnd: number) {
   return out;
 }
 
+// Portee d'appel (doc 11 P0-4 / P1-3). Deux appelants legitimes :
+//   - le cron, en service_role  -> toutes les equipes
+//   - un coach/admin depuis l'app -> UNIQUEMENT ses equipes
+// Tout autre appelant est refuse. Avant ce garde, la fonction etait
+// declenchable par n'importe qui et renvoyait l'identite de tous les tenants.
+async function resolveScope(req: Request): Promise<
+  { ok: true; all: true } | { ok: true; all: false; teamIds: string[] } | { ok: false }
+> {
+  const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!token) return { ok: false };
+
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1] ?? ""));
+    if (payload?.role === "service_role") return { ok: true, all: true };
+  } catch { /* jeton illisible : on tente la voie utilisateur */ }
+
+  const { data: userData } = await supa.auth.getUser(token);
+  if (!userData?.user) return { ok: false };
+
+  const { data: mems } = await supa.from("memberships")
+    .select("team_id, role").eq("user_id", userData.user.id)
+    .in("role", ["coach", "admin"]);
+  const teamIds = (mems ?? []).map((m: { team_id: string }) => m.team_id);
+  if (!teamIds.length) return { ok: false };
+  return { ok: true, all: false, teamIds };
+}
+
 Deno.serve(async (req: Request) => {
+  const scope = await resolveScope(req);
+  if (!scope.ok) return new Response("forbidden", { status: 403 });
+
   const reqUrl = new URL(req.url);
   const dryRun = reqUrl.searchParams.get("dry_run") === "1";
 
-  const { data: teams, error: dbErr } = await supa.from("teams")
-    .select("id, name, ics_url").not("ics_url", "is", null);
+  let q = supa.from("teams").select("id, name, ics_url").not("ics_url", "is", null);
+  if (!scope.all) q = q.in("id", scope.teamIds);
+  const { data: teams, error: dbErr } = await q;
 
   if (dbErr) return Response.json({ ok: false, error: dbErr.message });
 
@@ -301,5 +332,8 @@ Deno.serve(async (req: Request) => {
     }
     diag.push(td);
   }
-  return Response.json({ ok: true, upserted: total, errors, ics_bytes: fetched, teams_found: teams?.length ?? 0, diag });
+  // `diag` contenait l'identifiant, le nom et l'hote calendrier de TOUTES
+  // les equipes clientes (doc 11 P0-4). Conserve dans les logs, jamais renvoye.
+  console.log("[ICS] diag", JSON.stringify(diag));
+  return Response.json({ ok: true, upserted: total, errors, ics_bytes: fetched, teams_found: teams?.length ?? 0 });
 });

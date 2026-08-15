@@ -58,7 +58,7 @@ export default function StitchCreateAccountScreen() {
           }
           await supaJoinTeam(
             formData.teamCode.trim(),
-            role.toLowerCase() === "coach" ? "coach" : "athlete",
+            // Le role n'est plus envoye : le serveur le deduit du code (doc 11 P0-2)
             formData.fullName.trim()
           );
           // Fix course : forcer un événement auth APRÈS l'adhésion pour que

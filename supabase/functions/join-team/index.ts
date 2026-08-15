@@ -24,15 +24,31 @@ Deno.serve(async (req) => {
     }
     const user = userData.user;
 
-    const { invite_code, role, display_name } = await req.json();
+    // Le champ `role` du corps est IGNORE : il etait la faille. Le role est
+    // deduit du code presente (doc 11 P0-2, doc 14 P0-1).
+    const { invite_code, display_name } = await req.json();
     if (!invite_code || typeof invite_code !== "string") {
       return Response.json({ error: "invite_code required" }, { status: 400, headers: cors });
     }
-    const memberRole = role === "coach" ? "coach" : "athlete";
+    const code = invite_code.trim();
 
     const { data: team } = await supa.from("teams")
-      .select("id, name").eq("invite_code", invite_code.trim()).single();
+      .select("id, name, invite_code, coach_code")
+      .or(`invite_code.eq.${code},coach_code.eq.${code}`)
+      .maybeSingle();
     if (!team) return Response.json({ error: "team not found" }, { status: 404, headers: cors });
+
+    const memberRole = team.coach_code && team.coach_code === code ? "coach" : "athlete";
+
+    // Un membre existant ne change JAMAIS de role en re-presentant un code.
+    const { data: existing } = await supa.from("memberships")
+      .select("role").eq("team_id", team.id).eq("user_id", user.id).maybeSingle();
+    if (existing) {
+      return Response.json(
+        { ok: true, team_id: team.id, team_name: team.name, role: existing.role },
+        { headers: cors },
+      );
+    }
 
     // Profil
     await supa.from("profiles").upsert({

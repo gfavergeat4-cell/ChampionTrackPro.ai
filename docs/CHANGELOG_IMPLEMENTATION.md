@@ -302,3 +302,50 @@ Parsing Babel des 5 fichiers touchés : OK. Graphe d'imports depuis `index.js` :
 2. `npm run web:build`, puis commit et push.
 3. **Décider de la bascule** : tant que `team_questionnaires` n'est pas modifié, rien ne change pour l'équipe pilote. Le bloc SQL de bascule est commenté en fin de migration 012.
 4. Les 9 décisions du doc 15 §12 restent ouvertes — notamment zones ±10 points vs ±15 %, et moyenne d'équipe vs distribution.
+
+### Bloc 12 — Durcissement : 9 correctifs + rôle serveur (15 août 2026)
+
+Issus de `docs/11_AUDIT_BACKEND.md` et `docs/14_DURCISSEMENT_SECURITE.md`. Vérifiés dans le code avant correction, pas repris sur parole.
+
+#### Sécurité
+
+**Rôle coach décidé par le serveur** (11 P0-2 / 14 P0-1). `join-team` lisait le rôle dans le corps de la requête : tout athlète possédant le code d'équipe se réinscrivait en cochant « coach » et accédait aux réponses nominatives de tout le roster. **Décision fondateur : deux codes distincts générés à la création de l'équipe.** `teams.coach_code` ajouté (migration 015, avec backfill), `create-team` génère `XXXXXX-A` et `XXXXXX-C`, `join-team` déduit le rôle du code présenté et **ignore le champ `role`**. Un membre existant ne change plus jamais de rôle en re-présentant un code. `ctpApi.joinTeam()` perd son paramètre `role`.
+
+**Gardes d'appelant** (11 P0-3/P0-4). `compute-metrics` et `morning-brief` acceptaient n'importe quel appelant et écrivaient sur le `team_id` fourni — exfiltration inter-tenant. Garde service-role ajouté, identique à celui de `notify`. `ics-sync` est un cas à part : le bouton « Sync Now » du coach l'appelle avec son propre jeton, un garde strict aurait cassé la fonction. Portée résolue à la place : service-role → toutes les équipes, coach/admin → **uniquement les siennes**, tout autre appelant → 403. Corrige au passage P1-3 (un clic ne synchronise plus tous les clients).
+
+**Fuite de `diag`** (11 P0-4). `ics-sync` renvoyait à tout appelant l'identifiant, le nom et l'hôte calendrier de **toutes** les équipes. Déplacé dans les logs serveur.
+
+**`birth_year` retiré de `v_ai_dataset`** (14 P2-3). Pseudonyme + poste + année de naissance suffisent à réidentifier un joueur dans un roster de quinze.
+
+**`coach_feedback` verrouillé** (11 P1-13). La policy `FOR ALL` laissait un coach modifier et supprimer ses retours — or c'est le futur dataset d'apprentissage, que la Constitution interdit de purger. Réduit à SELECT + INSERT.
+
+#### Bugs silencieux
+
+**`create-team` était totalement cassé** (11 P0-1) : insertion sur `org_id` alors que la colonne s'appelle `organization_id`. **Aucune équipe ne pouvait être créée par le produit** ; toutes les équipes existantes viennent des seeds SQL. Correction : un mot.
+
+**Deux fonctions d'administration renvoyaient « succès » sans rien écrire** (11 P0-7). `teams` n'avait aucune policy UPDATE, `memberships` aucune policy DELETE : PostgreSQL filtrait sans erreur, PostgREST répondait 204, l'écran affichait un succès. Pire qu'un refus, parce qu'invisible. Policies `teams_admin_update` et `memberships_staff_delete` ajoutées.
+
+**`updateMyProfile` écrivait dans des colonnes inexistantes** (11 P1-11) : `jersey_number` et `position` vivent sur `memberships`, pas sur `profiles`. L'édition du profil échouait intégralement. Écriture désormais répartie sur les deux tables.
+
+**Doublons de séances** (11 P1-9). La contrainte `unique (team_id, ics_uid, start_utc)` ne protège rien quand `ics_uid` est NULL — en SQL, NULL n'entre jamais en conflit. Constaté en pratique pendant le seed : 187 séances là où on en attendait 60. Index unique partiel `uq_sessions_manual` sur les séances non-ICS.
+
+#### Performance et cohérence visuelle
+
+**Six index** sur les chemins les plus sollicités (11 P1-5) : `memberships(user_id)`, `daily_metrics(team_id, day)`, `responses(session_id)`, `briefs(team_id, brief_date)`, `sessions(team_id, start_utc)`, `flags(team_id, day)`.
+
+**`tokens.ts` nettoyé** (doc 10, étape 3) : `brand: "Cinzel, serif"` → `"'Marcellus', serif"` — Cinzel avait été retirée par décision du 8 juillet mais subsistait dans les tokens. Export `da` supprimé (32 lignes) : zéro consommateur dans tout le graphe d'imports, doublon de `courtlight` qui fait autorité depuis le doc 06.
+
+#### Correctif de la veille, à noter
+Les `revoke select` posés sur les vues de la migration 014 empêchaient le coach de lire son propre tableau : avec `security_invoker = true`, la RLS des tables sous-jacentes suffit déjà. Grants rétablis. Symptôme trompeur — l'écran affichait « 0 of 16 » sans erreur, parce que la fonction `safe()` de `ctpApi` avale les échecs de requête. **À revoir : transformer une erreur de permission en « pas de données » est le pire des deux mondes pour diagnostiquer.**
+
+#### Vérifications
+Parsing des 9 fichiers touchés : OK. Graphe d'imports : 76 fichiers, zéro import cassé.
+
+#### Action requise — Gabin
+1. Coller `015_hardening.sql` dans le SQL editor.
+2. `supabase functions deploy create-team join-team ics-sync compute-metrics morning-brief`.
+3. `npm run web:build`, commit, push.
+4. **Récupérer les nouveaux codes staff** : `select name, invite_code, coach_code from teams;` — le code coach ne doit jamais être diffusé au roster.
+
+#### Restant, avec décision en attente
+Relance +6 h contre fenêtre RLS de 5 h (11 P0-5) · fenêtre de détection du watcher (P0-6) · `f_engine_user` pour la montée en charge (P1-1) · suppression réelle d'un athlète et d'une équipe (14 P0-2, bloquant pour signer) · journal d'accès (14 P1-4) · MFA staff (14 P1-2) · seuils ±10 vs ±15 % · cyan de marque.

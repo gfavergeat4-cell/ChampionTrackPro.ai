@@ -42,7 +42,11 @@ export async function triggerIcsSync() {
   return { ok: true };
 }
 
-export async function joinTeam(inviteCode: string, role: "athlete" | "coach", displayName?: string) {
+/**
+ * Adhésion par code. Le rôle n'est PAS un paramètre : le serveur le déduit
+ * du code présenté (code athlète ou code staff). Voir doc 11 P0-2.
+ */
+export async function joinTeam(inviteCode: string, displayName?: string) {
   const { data: { session } } = await db().auth.getSession();
   const res = await fetch(
     `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/join-team`,
@@ -52,7 +56,7 @@ export async function joinTeam(inviteCode: string, role: "athlete" | "coach", di
         "Content-Type": "application/json",
         Authorization: `Bearer ${session?.access_token}`,
       },
-      body: JSON.stringify({ invite_code: inviteCode, role, display_name: displayName }),
+      body: JSON.stringify({ invite_code: inviteCode, display_name: displayName }),
     },
   );
   const j = await res.json();
@@ -278,7 +282,7 @@ export async function getAdminTeams() {
   const { data: { user } } = await db().auth.getUser();
   if (!user) return [];
   const { data: mems } = await db().from("memberships")
-    .select("team_id, role, teams(id, name, sport, invite_code)")
+    .select("team_id, role, teams(id, name, sport, invite_code, coach_code)")
     .eq("user_id", user.id)
     .in("role", ["admin", "coach"]);
   if (!mems?.length) return [];
@@ -294,6 +298,7 @@ export async function getAdminTeams() {
         name: team?.name ?? m.team_id,
         sport: team?.sport ?? null,
         invite_code: team?.invite_code ?? null,
+        coach_code: team?.coach_code ?? null,
         memberCount: count ?? 0,
       };
     }),
@@ -540,11 +545,30 @@ export async function getMyProfile() {
 }
 
 /** Update user profile. */
+/**
+ * `display_name` vit sur `profiles`, `jersey_number` et `position` sur
+ * `memberships` (doc 11 P1-11). L'ancienne version écrivait les trois dans
+ * `profiles`, où deux des colonnes n'existent pas : l'édition du profil
+ * échouait intégralement.
+ */
 export async function updateMyProfile(updates: { display_name?: string; jersey_number?: number; position?: string }) {
   const { data: { user } } = await db().auth.getUser();
   if (!user) throw new Error("not signed in");
-  const { error } = await db().from("profiles")
-    .upsert({ user_id: user.id, ...updates }, { onConflict: "user_id" });
-  if (error) throw error;
+
+  if (updates.display_name !== undefined) {
+    const { error } = await db().from("profiles")
+      .upsert({ user_id: user.id, display_name: updates.display_name }, { onConflict: "user_id" });
+    if (error) throw error;
+  }
+
+  const teamFields: Record<string, unknown> = {};
+  if (updates.jersey_number !== undefined) teamFields.jersey_number = updates.jersey_number;
+  if (updates.position !== undefined) teamFields.position = updates.position;
+
+  if (Object.keys(teamFields).length) {
+    const { error } = await db().from("memberships")
+      .update(teamFields).eq("user_id", user.id);
+    if (error) throw error;
+  }
   return { ok: true };
 }

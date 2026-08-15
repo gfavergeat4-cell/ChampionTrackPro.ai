@@ -10,6 +10,7 @@ interface TeamItem {
   name: string;
   sport: string | null;
   invite_code: string | null;
+  coach_code?: string | null;
   memberCount: number;
 }
 
@@ -58,6 +59,7 @@ export default function AdminHomeScreen() {
         name: result.name,
         sport: result.sport,
         invite_code: result.invite_code,
+        coach_code: result.coach_code ?? null,
         memberCount: 1,
       }]);
       setShowCreate(false);

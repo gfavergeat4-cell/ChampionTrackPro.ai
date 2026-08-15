@@ -68,16 +68,21 @@ Deno.serve(async (req) => {
     orgId = newOrg.id;
   }
 
-  const inviteCode = generateCode(6);
+  // Deux codes distincts : le role est deduit du code utilise, jamais
+  // declare par le client (doc 11 P0-2). L'athlete ne possede que le
+  // code athlete, il ne peut donc pas se promouvoir coach.
+  const inviteCode = generateCode(6) + "-A";
+  const coachCode  = generateCode(6) + "-C";
 
   const { data: team, error: teamErr } = await supa.from("teams")
     .insert({
-      org_id: orgId,
+      organization_id: orgId,
       name: name.trim().slice(0, 100),
       sport: (sport || "basketball").trim().slice(0, 50),
       invite_code: inviteCode,
+      coach_code: coachCode,
     })
-    .select("id, name, sport, invite_code")
+    .select("id, name, sport, invite_code, coach_code")
     .single();
 
   if (teamErr) {
@@ -100,6 +105,7 @@ Deno.serve(async (req) => {
     name: team.name,
     sport: team.sport,
     invite_code: team.invite_code,
+    coach_code: team.coach_code,
   }, {
     headers: {
       "Access-Control-Allow-Origin": "*",

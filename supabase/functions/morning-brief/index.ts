@@ -71,7 +71,21 @@ async function generateBrief(team_id: string) {
   } catch (e) { console.error("[BRIEF] staff notify:", String(e)); }
 }
 
+// Garde service-role (doc 11 P0-3). Meme controle que `notify` : sans lui,
+// n'importe qui muni de la cle anon peut faire ecrire cette fonction sur
+// l'equipe de son choix.
+function isServiceRole(req: Request): boolean {
+  const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1] ?? ""));
+    return payload?.role === "service_role";
+  } catch { return false; }
+}
+
 Deno.serve(async (req) => {
+  if (!isServiceRole(req)) {
+    return new Response("forbidden", { status: 403 });
+  }
   let team_id: string | null = null;
   try { team_id = (await req.json())?.team_id ?? null; } catch (_) { /* corps vide = toutes les équipes */ }
   if (team_id) {
