@@ -15,6 +15,22 @@ import {
 } from "../services/vapidPush";
 import { courtlight as cl } from "../theme/tokens";
 
+// DA athlète — alignée sur l'écran de check-in (modèle validé par le fondateur).
+// Les écrans athlète partagent désormais une seule palette : fond dégradé
+// #0B0F1A -> #020409, cartes #141A24 avec liseré cyan interne, accent #00E0FF.
+const P = {
+  bgTop: "#0B0F1A",
+  bgBottom: "#020409",
+  card: "#141A24",
+  ring: "rgba(0,224,255,0.10)",
+  accent: "#00E0FF",
+  accentDeep: "#4A67FF",
+  textHi: "rgba(255,255,255,0.9)",
+  textMid: "rgba(154,163,178,0.7)",
+  textLow: "rgba(154,163,178,0.45)",
+  inactive: "#1E222D",
+};
+
 // ── Skeleton (doc 06 section 6) ──
 function Skeleton({ width = "70%" }: { width?: string | number }) {
   const shimmer = React.useRef(new Animated.Value(0)).current;
@@ -53,7 +69,7 @@ function BottomTabBar({ active }: { active: "Home" | "Schedule" | "Profile" }) {
       background: "rgba(7,11,20,0.95)",
       backdropFilter: "blur(30px)",
       WebkitBackdropFilter: "blur(30px)",
-      borderTop: "0.5px solid rgba(0,212,255,0.18)",
+      borderTop: "0.5px solid rgba(0,224,255,0.18)",
       padding: "8px 12px 12px",
       paddingBottom: "max(12px, env(safe-area-inset-bottom))",
       zIndex: 10000,
@@ -78,15 +94,15 @@ function BottomTabBar({ active }: { active: "Home" | "Schedule" | "Profile" }) {
               border: "none",
               cursor: "pointer",
               padding: "6px 12px",
-              color: isActive ? cl.accent.cyan : cl.text.mid,
+              color: isActive ? P.accent : P.textMid,
             }}
           >
             <span style={{
               fontSize: 10,
               fontWeight: isActive ? "600" : "400",
               fontFamily: cl.type.ui,
-              color: isActive ? cl.accent.cyan : cl.text.mid,
-              textShadow: isActive ? `0 0 4px rgba(0,212,255,0.3)` : "none",
+              color: isActive ? P.accent : P.textMid,
+              textShadow: isActive ? `0 0 4px rgba(0,224,255,0.3)` : "none",
             }}>
               {tab.label}
             </span>
@@ -94,9 +110,9 @@ function BottomTabBar({ active }: { active: "Home" | "Schedule" | "Profile" }) {
               <div style={{
                 height: 2,
                 width: 22,
-                background: cl.accent.cyan,
+                background: P.accent,
                 borderRadius: 1,
-                boxShadow: "0 0 6px rgba(0,212,255,0.5)",
+                boxShadow: "0 0 6px rgba(0,224,255,0.5)",
               }} />
             )}
           </button>
@@ -277,7 +293,7 @@ export default function ProfileScreenSupabase() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => { setRefreshing(true); loadProfile(); }}
-            tintColor={cl.accent.cyan}
+            tintColor={P.accent}
           />
         }
       >
@@ -305,7 +321,7 @@ export default function ProfileScreenSupabase() {
               value={editName}
               onChangeText={setEditName}
               placeholder="Enter your name"
-              placeholderTextColor={cl.text.low}
+              placeholderTextColor={P.textLow}
               style={s.input}
             />
           ) : (
@@ -323,7 +339,7 @@ export default function ProfileScreenSupabase() {
               value={editJersey}
               onChangeText={setEditJersey}
               placeholder="Enter jersey number"
-              placeholderTextColor={cl.text.low}
+              placeholderTextColor={P.textLow}
               keyboardType="numeric"
               style={s.input}
             />
@@ -338,7 +354,7 @@ export default function ProfileScreenSupabase() {
               value={editPosition}
               onChangeText={setEditPosition}
               placeholder="e.g. Guard, Forward, Center"
-              placeholderTextColor={cl.text.low}
+              placeholderTextColor={P.textLow}
               style={s.input}
             />
           ) : (
@@ -356,7 +372,7 @@ export default function ProfileScreenSupabase() {
           {pseudonym ? (
             <>
               <Text style={s.fieldLabel}>Pseudonym</Text>
-              <Text style={[s.fieldValue, { color: cl.accent.cyan }]}>{pseudonym}</Text>
+              <Text style={[s.fieldValue, { color: P.accent }]}>{pseudonym}</Text>
             </>
           ) : null}
         </View>
@@ -467,7 +483,9 @@ export default function ProfileScreenSupabase() {
 const s = StyleSheet.create({
   scroll: {
     flex: 1,
-    backgroundColor: "transparent",
+    ...(Platform.OS === "web"
+      ? { background: `linear-gradient(to bottom, ${P.bgTop}, ${P.bgBottom})` }
+      : { backgroundColor: P.bgTop }),
   },
   container: {
     padding: 18,
@@ -481,19 +499,19 @@ const s = StyleSheet.create({
     fontFamily: "Marcellus_400Regular",
     fontSize: 12,
     letterSpacing: 4,
-    color: cl.text.mid,
+    color: P.textMid,
     textAlign: "center" as any,
     marginBottom: 4,
   },
   brandAccent: {
-    color: cl.accent.cyan,
+    color: P.accent,
     fontWeight: "600",
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: "700",
     fontFamily: "Inter_600SemiBold",
-    color: cl.text.hi,
+    color: P.textHi,
     textAlign: "center" as any,
   },
   avatarWrap: {
@@ -506,45 +524,45 @@ const s = StyleSheet.create({
     height: 90,
     borderRadius: 45,
     borderWidth: 2,
-    borderColor: "rgba(0,212,255,0.45)",
+    borderColor: "rgba(0,224,255,0.45)",
     alignItems: "center",
     justifyContent: "center",
     ...(Platform.OS === "web"
       ? {
-          background: "linear-gradient(145deg, rgba(0,212,255,0.25), rgba(7,11,20,0.90))",
-          boxShadow: "0 12px 30px rgba(0,0,0,0.4), inset 0 0 14px rgba(0,212,255,0.15)",
+          background: "linear-gradient(145deg, rgba(0,224,255,0.25), rgba(7,11,20,0.90))",
+          boxShadow: "0 12px 30px rgba(0,0,0,0.4), inset 0 0 14px rgba(0,224,255,0.15)",
         }
-      : { backgroundColor: "rgba(0,212,255,0.15)" }),
+      : { backgroundColor: "rgba(0,224,255,0.15)" }),
   },
   avatarInitial: {
     fontSize: 36,
     fontWeight: "300",
     fontFamily: "Inter_300Light",
-    color: cl.text.hi,
+    color: P.textHi,
   },
   card: {
-    backgroundColor: cl.surface.card,
+    backgroundColor: P.card,
     borderWidth: 1,
-    borderColor: "rgba(0,212,255,0.10)",
-    borderRadius: cl.radius.card,
+    borderColor: "rgba(0,224,255,0.10)",
+    borderRadius: 16,
     padding: 20,
     marginTop: 12,
     ...(Platform.OS === "web"
-      ? { boxShadow: `${cl.shadow.e1}, inset 0 1px 0 rgba(160,220,255,0.10)` }
+      ? { boxShadow: `inset 0 0 0 1px ${P.ring}` }
       : {}),
   },
   miniLabel: {
     fontSize: 11,
     fontWeight: "500",
     letterSpacing: 2,
-    color: cl.text.mid,
+    color: P.textMid,
     textTransform: "uppercase" as any,
     marginBottom: 12,
   },
   fieldLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: cl.text.mid,
+    color: P.textMid,
     marginTop: 14,
     marginBottom: 4,
     textTransform: "uppercase" as any,
@@ -554,15 +572,15 @@ const s = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     fontFamily: "Inter_500Medium",
-    color: cl.text.hi,
+    color: P.textHi,
   },
   input: {
     height: 44,
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(0,212,255,0.20)",
-    borderRadius: cl.radius.control,
-    color: cl.text.hi,
+    borderColor: "rgba(0,224,255,0.20)",
+    borderRadius: 12,
+    color: P.textHi,
     paddingHorizontal: 14,
     fontSize: 15,
     fontFamily: "Inter_400Regular",
@@ -582,11 +600,11 @@ const s = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     fontFamily: "Inter_600SemiBold",
-    color: cl.text.hi,
+    color: P.textHi,
   },
   notifDetail: {
     fontSize: 12,
-    color: cl.text.low,
+    color: P.textLow,
     marginTop: 1,
   },
   actionsCol: {
@@ -599,12 +617,12 @@ const s = StyleSheet.create({
   },
   primaryBtn: {
     height: 48,
-    borderRadius: cl.radius.control,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     ...(Platform.OS === "web"
       ? { background: "linear-gradient(135deg, #00D4FF, #0066FF)", boxShadow: "0 8px 24px rgba(0,120,255,0.30)" }
-      : { backgroundColor: cl.accent.cyan }),
+      : { backgroundColor: P.accent }),
   },
   primaryBtnText: {
     color: "#04121F",
@@ -615,7 +633,7 @@ const s = StyleSheet.create({
   },
   cancelBtn: {
     height: 48,
-    borderRadius: cl.radius.control,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.06)",
@@ -626,11 +644,11 @@ const s = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     fontFamily: "Inter_600SemiBold",
-    color: cl.text.hi,
+    color: P.textHi,
   },
   logoutBtn: {
     height: 48,
-    borderRadius: cl.radius.control,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(239,68,68,0.08)",
@@ -645,7 +663,7 @@ const s = StyleSheet.create({
   },
   footer: {
     fontSize: 11,
-    color: cl.text.low,
+    color: P.textLow,
     textAlign: "center" as any,
     marginTop: 28,
   },
