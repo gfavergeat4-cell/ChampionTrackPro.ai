@@ -344,6 +344,95 @@ export async function createTeam(name: string, sport: string) {
   return j;
 }
 
+// ── Lecture coach multi-marqueurs (méthode DAR, doc 15) ──────
+export type Zone = "GREEN" | "BLUE" | "YELLOW" | "INSUFFICIENT_DATA";
+export type Axis = "PHY" | "TEC" | "MEN" | "ACA";
+
+export interface AxisReading {
+  axis: Axis;
+  value: number | null;
+  ema: number | null;
+  deltaPoints: number | null;
+  zone: Zone;
+  trend7d: number | null;
+  dataDays: number;
+}
+
+export interface AthleteBoardRow {
+  userId: string;
+  name: string;
+  pseudonym: string | null;
+  jerseyNumber: number | null;
+  position: string | null;
+  axes: Partial<Record<Axis, AxisReading>>;
+  /** Nombre de marqueurs hors zone habituelle — tri arithmétique, pas un jugement. */
+  outOfBand: number;
+  responded: boolean;
+}
+
+/**
+ * Tableau de lecture du coach pour un jour donné.
+ * Une ligne par athlète, un état par axe. **Aucune moyenne d'équipe** :
+ * la méthode DAR proscrit la normalisation interindividuelle (partie 2 §E.4).
+ * L'agrégation se fait par distribution, calculée dans l'écran.
+ */
+export async function getCoachBoard(teamId: string, dayISO: string): Promise<AthleteBoardRow[]> {
+  const [rows, members] = await Promise.all([
+    safe(db().from("v_coach_board").select("*").eq("team_id", teamId).eq("day", dayISO), [] as any[]),
+    getTeamMembers(teamId),
+  ]);
+
+  const byUser: Record<string, AthleteBoardRow> = {};
+  for (const m of (members as any[]).filter((x) => x.role === "athlete")) {
+    byUser[m.user_id] = {
+      userId: m.user_id,
+      name: m.profiles?.display_name || m.pseudonym || "Player",
+      pseudonym: m.pseudonym ?? null,
+      jerseyNumber: m.jersey_number ?? null,
+      position: m.position ?? null,
+      axes: {},
+      outOfBand: 0,
+      responded: false,
+    };
+  }
+
+  for (const r of rows as any[]) {
+    const row = byUser[r.user_id];
+    if (!row) continue;
+    row.responded = true;
+    row.axes[r.axis as Axis] = {
+      axis: r.axis,
+      value: r.value,
+      ema: r.ema,
+      deltaPoints: r.delta_points,
+      zone: (r.zone ?? "INSUFFICIENT_DATA") as Zone,
+      trend7d: r.ema_trend_7d,
+      dataDays: r.data_days ?? 0,
+    };
+  }
+
+  for (const row of Object.values(byUser)) {
+    row.outOfBand = Object.values(row.axes)
+      .filter((a) => a && (a.zone === "YELLOW" || a.zone === "BLUE")).length;
+  }
+
+  return Object.values(byUser).sort((a, b) => {
+    if (a.responded !== b.responded) return a.responded ? -1 : 1;
+    if (b.outOfBand !== a.outOfBand) return b.outOfBand - a.outOfBand;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/** Historique d'un axe pour un athlète — sert au détail joueur. */
+export async function getAxisHistory(userId: string, axis: Axis, days = 28) {
+  const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const { data } = await db().from("v_axis_zones")
+    .select("day, value, ema, delta_points, zone")
+    .eq("user_id", userId).eq("axis", axis)
+    .gte("day", from).order("day");
+  return data ?? [];
+}
+
 // ── Console santé système (doc 09 lot L3) ────────────────────
 export interface TeamHealth {
   id: string;

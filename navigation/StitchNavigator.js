@@ -37,6 +37,7 @@ import PerformanceDashboard from "../src/screens/PerformanceDashboard";
 import AdminHomeScreen from "../src/screens/AdminHomeScreen";
 import CoachHomeScreen from "../src/screens/CoachHomeScreen";
 import CoachTeamScreen from "../src/screens/CoachTeamScreen";
+import CoachBoard from "../src/screens/CoachBoard";
 import CoachProfileScreen from "../src/screens/CoachProfileScreen";
 import CoachScheduleScreen from "../src/screens/CoachScheduleScreen";
 import AthleteDetailScreen from "../src/screens/AthleteDetailScreen";
@@ -264,7 +265,7 @@ function CoachTabs() {
       />
       <CoachTab.Screen
         name="Team"
-        component={CoachTeamScreen}
+        component={USE_SUPABASE ? CoachBoard : CoachTeamScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon name="Teams" color={color} size={size} focused={focused} />
