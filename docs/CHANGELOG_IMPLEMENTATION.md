@@ -381,3 +381,31 @@ Les huit occurrences des trois fonds concurrents unifiées sur **`#070B14`** (`c
 #### Restant
 - `public/logo/logo_clean.png` et `assets/logo.svg` (contient `Cinzel`, retirée le 8 juillet) : suppression refusée par le montage, **à supprimer à la main**. Aucun des deux n'est référencé.
 - Les six décisions de couleur du doc 10 §6 étape 2 restent ouvertes : cyan de marque, mot en cyan, vert, rouge, orange friction, zone de respiration.
+
+### Bloc 14 — Pseudonymes stables, suppression réelle, export (15 août 2026)
+
+#### Migration 016
+
+**Pseudonymes non réutilisables** (11 P1-10, 14 P1-9). `join-team` calculait le pseudonyme par `count()` sur les membres : un joueur part, le suivant hérite du sien. Or c'est le **seul identifiant transmis au LLM** — deux athlètes différents apparaissaient sous le même nom dans les briefs, sans erreur nulle part. Remplacé par `teams.pseudonym_seq`, compteur qui ne décroît jamais, alloué par `next_pseudonym()`. Backfill sur la valeur max existante.
+
+**`purge_athlete(team, user)`** (14 P0-2). Efface réponses, métriques, flags, relances et adhésion, et retourne le décompte de ce qui a été supprimé. Ne touche pas à `auth.users` : la personne peut appartenir à une autre équipe, la suppression du compte est une action distincte. Les souscriptions push ne partent que si la personne ne fait plus partie d'aucune équipe.
+
+**`purge_team(team)`** — fin de contrat. Compte **avant** de supprimer : la cascade efface sans laisser de trace, or une fin de contrat doit pouvoir être justifiée.
+
+**`export_athlete(team, user)`** (14 P2-1) — le pendant du droit à la suppression. Une université demandera aussi la portabilité.
+
+Les trois fonctions sont `security definer` et **révoquées pour `anon` et `authenticated`** : le seul chemin est l'edge function.
+
+#### Edge function `admin-purge`
+Point d'entrée unique, qui vérifie côté serveur que l'appelant est **admin de l'équipe visée** — jamais sur déclaration du client. Un admin ne peut pas se purger lui-même. Trace minimale en log : qui, quoi, quand, sans aucune donnée de santé.
+
+#### Couche d'accès
+`removeMember` documenté pour ce qu'il est : **retirer de l'équipe sans effacer**. Ajout de `purgeAthlete`, `purgeTeam`, `exportAthlete`. La distinction entre les deux gestes est désormais explicite dans le code — c'était la confusion à l'origine du P0-2.
+
+#### Correction d'une affirmation fausse
+`_shared/llm.ts` ligne 3 affirmait « API zéro-rétention ». La rétention par défaut d'Anthropic est de 30 jours, et un accord *Zero Data Retention* se contracte. Commentaire remplacé par un avertissement explicite. **À ne jamais reprendre dans un argumentaire de vente tant que l'accord n'est pas signé.**
+
+#### Action requise — Gabin
+1. Coller `016_pseudonyms_and_purge.sql`.
+2. `supabase functions deploy admin-purge` et `supabase functions deploy join-team`.
+3. Aucun changement d'interface : les fonctions de purge sont disponibles dans `ctpApi` mais pas encore câblées à un bouton. Volontaire — un bouton « supprimer définitivement » mérite sa propre confirmation à double saisie.

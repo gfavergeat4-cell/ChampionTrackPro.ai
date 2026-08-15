@@ -1,6 +1,10 @@
 // Appel LLM — couche TRADUCTION uniquement. Le LLM ne calcule rien,
 // ne décide rien : il narre des scores et des flags déjà produits.
-// API zéro-rétention. Payload pseudonymisé (P-07), jamais nom + santé.
+// Payload pseudonymisé (P-07) : jamais de nom, jamais de donnée nominative.
+// ⚠ NE PAS affirmer « zéro rétention » : la rétention par défaut d'Anthropic
+//   est de 30 jours. Un accord Zero Data Retention se contracte, il ne se
+//   déclare pas. Tant qu'il n'est pas signé, cette phrase serait une fausse
+//   déclaration commerciale (doc 12, R-06).
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
 
 export const MODELS = {

@@ -57,10 +57,16 @@ Deno.serve(async (req) => {
       email: user.email,
     });
 
-    // Pseudonyme stable P-01..P-n (pour la couche LLM)
-    const { count } = await supa.from("memberships")
-      .select("*", { count: "exact", head: true }).eq("team_id", team.id);
-    const pseudonym = `P-${String((count ?? 0) + 1).padStart(2, "0")}`;
+    // Pseudonyme via un compteur qui ne decroit jamais (migration 016).
+    // Le count() precedent reattribuait le pseudonyme d'un joueur parti :
+    // deux athletes differents se retrouvaient sous le meme nom dans les
+    // briefs LLM, sans erreur nulle part.
+    const { data: pseudoData, error: pseudoErr } = await supa
+      .rpc("next_pseudonym", { p_team: team.id });
+    if (pseudoErr) {
+      return Response.json({ error: pseudoErr.message }, { status: 500, headers: cors });
+    }
+    const pseudonym = pseudoData as string;
 
     const { error: memErr } = await supa.from("memberships").upsert({
       team_id: team.id, user_id: user.id, role: memberRole, pseudonym,

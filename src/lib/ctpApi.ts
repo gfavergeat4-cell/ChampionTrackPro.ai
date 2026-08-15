@@ -322,12 +322,55 @@ export async function updateTeamInfo(teamId: string, updates: Record<string, any
   return { ok: true };
 }
 
-/** Remove a member from a team (admin). */
+/**
+ * Retire un membre de l'équipe. **Ne supprime pas ses données** : réponses et
+ * métriques restent, l'historique de l'équipe est préservé. C'est le geste
+ * courant (un joueur quitte le programme).
+ * Pour effacer réellement, voir `purgeAthlete`.
+ */
 export async function removeMember(teamId: string, userId: string) {
   const { error } = await db().from("memberships")
     .delete().eq("team_id", teamId).eq("user_id", userId);
   if (error) throw error;
   return { ok: true };
+}
+
+async function adminPurge(body: Record<string, unknown>) {
+  const { data: { session } } = await db().auth.getSession();
+  const res = await fetch(
+    `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-purge`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error ?? "purge failed");
+  return j;
+}
+
+/**
+ * ⚠ IRRÉVERSIBLE. Efface toutes les données d'un athlète dans cette équipe :
+ * réponses, métriques, flags, relances, adhésion. Le compte `auth.users` est
+ * conservé (la personne peut appartenir à une autre équipe).
+ * Réservé à un admin de l'équipe. Répond au droit à la suppression (doc 12).
+ */
+export async function purgeAthlete(teamId: string, userId: string) {
+  return adminPurge({ action: "purge_athlete", team_id: teamId, user_id: userId });
+}
+
+/** ⚠ IRRÉVERSIBLE. Fin de contrat : efface l'équipe et tout son historique. */
+export async function purgeTeam(teamId: string) {
+  return adminPurge({ action: "purge_team", team_id: teamId });
+}
+
+/** Export complet des données d'un athlète — droit à la portabilité. */
+export async function exportAthlete(teamId: string, userId: string) {
+  return adminPurge({ action: "export_athlete", team_id: teamId, user_id: userId });
 }
 
 /** Create a team via edge function (service-role pattern). */
