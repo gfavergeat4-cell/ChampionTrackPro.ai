@@ -372,6 +372,18 @@ export default function AdminTeamDetailScreen() {
             </div>
           )}
         </div>
+        {/* Tableau de lecture — même écran que le coach (doc 16) */}
+        <button
+          type="button"
+          onClick={() => navigation.navigate("TeamBoard", { teamId, teamName })}
+          title="Team board"
+          style={{ background: "rgba(0,224,255,0.10)", border: "1px solid rgba(0,224,255,0.28)", borderRadius: cl.radius.control, color: "#00E0FF", padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 7, flexShrink: 0, fontSize: 13, fontFamily: cl.type.ui }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" />
+          </svg>
+          Board
+        </button>
         {/* Gear icon */}
         <button
           type="button"

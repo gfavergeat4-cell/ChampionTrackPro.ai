@@ -339,6 +339,9 @@ function RootStackNavigator({ role, user, pendingDeepLink, navigationRef, onboar
           initialParams={{ role: "admin" }}
         />
         <RootStack.Screen name="AdminTeamDetailScreen" component={AdminTeamDetailScreen} />
+        {/* Même tableau de lecture que le coach, ouvert sur n'importe quelle équipe */}
+        <RootStack.Screen name="TeamBoard" component={CoachBoard} />
+        <RootStack.Screen name="AthleteDetail" component={AthleteDetailScreen} />
         <RootStack.Screen name="TeamDetails" component={TeamDetails} />
         <RootStack.Screen name="DevEventsProbe" component={DevEventsProbe} />
         <RootStack.Screen name="DebugTestQuestionnaire" component={DebugTestQuestionnaireScreen} />

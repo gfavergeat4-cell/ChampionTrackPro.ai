@@ -19,7 +19,7 @@
 // Langage visuel : celui du check-in athlète (cartes #141A24, liseré cyan).
 import React from "react";
 import { Platform, View, Text, ActivityIndicator } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { getMyMembership, getCoachBoard } from "../lib/ctpApi";
 import type { AthleteBoardRow, AxisReading, Axis, Zone } from "../lib/ctpApi";
 import { useIsDesktop } from "../hooks/useIsDesktop";
@@ -108,7 +108,12 @@ function Marker({ reading }: { reading?: AxisReading }) {
 
 export default function CoachBoard() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const isDesktop = useIsDesktop();
+  // L'admin ouvre ce même tableau pour n'importe quelle équipe : si des
+  // paramètres arrivent, ils priment sur l'équipe du coach connecté.
+  const paramTeamId: string | undefined = route.params?.teamId;
+  const paramTeamName: string | undefined = route.params?.teamName;
   const [rows, setRows] = React.useState<AthleteBoardRow[]>([]);
   const [teamName, setTeamName] = React.useState("");
   const [teamId, setTeamId] = React.useState<string | null>(null);
@@ -119,11 +124,17 @@ export default function CoachBoard() {
     let cancelled = false;
     (async () => {
       try {
-        const m: any = await getMyMembership();
-        if (!m?.team_id) throw new Error("No team linked to your account.");
-        if (!cancelled) { setTeamId(m.team_id); setTeamName(m.teams?.name ?? "My team"); }
+        let tid = paramTeamId ?? null;
+        let tname = paramTeamName ?? "";
+        if (!tid) {
+          const m: any = await getMyMembership();
+          if (!m?.team_id) throw new Error("No team linked to your account.");
+          tid = m.team_id;
+          tname = m.teams?.name ?? "My team";
+        }
+        if (!cancelled) { setTeamId(tid); setTeamName(tname); }
         const today = new Date().toISOString().slice(0, 10);
-        const data = await getCoachBoard(m.team_id, today);
+        const data = await getCoachBoard(tid!, today);
         if (!cancelled) setRows(data);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || String(e));
@@ -132,7 +143,7 @@ export default function CoachBoard() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [paramTeamId, paramTeamName]);
 
   if (Platform.OS !== "web") {
     return (
