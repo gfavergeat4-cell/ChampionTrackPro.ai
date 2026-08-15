@@ -349,3 +349,35 @@ Parsing des 9 fichiers touchés : OK. Graphe d'imports : 76 fichiers, zéro impo
 
 #### Restant, avec décision en attente
 Relance +6 h contre fenêtre RLS de 5 h (11 P0-5) · fenêtre de détection du watcher (P0-6) · `f_engine_user` pour la montée en charge (P1-1) · suppression réelle d'un athlète et d'une équipe (14 P0-2, bloquant pour signer) · journal d'accès (14 P1-4) · MFA staff (14 P1-2) · seuils ±10 vs ±15 % · cyan de marque.
+
+### Bloc 13 — Assets de marque régénérés depuis les logos officiels (15 août 2026)
+
+Application de `docs/10_SYSTEME_VISUEL.md` §6 étape 1.
+
+#### Ce qui n'allait pas
+- **Les quatre assets Expo étaient les placeholders par défaut** : `favicon.png`, `icon.png`, `adaptive-icon.png`, `splash-icon.png`. Le tout premier contact visuel avec le produit — icône installée, écran de démarrage — n'était pas la marque.
+- **Doublons binaires** : `icon-192.png` ≡ `icon-192-v2.png`, `icon-512.png` ≡ `icon-512-v2.png`, `logo_clean.png` ≡ `logo_nobackground.png`, `adaptive-icon.png` ≡ `splash-icon.png`.
+- **Trois couleurs de fond concurrentes** dans les configs : `#0E1528` (app.json ×2), `#0A0F1E` (app.json ×2), `#0A1F3C` (app.config.js ×2, manifest ×2).
+
+#### Régénéré depuis les sources officielles
+Emblème : `VISUEL/logos officiels/logo-191-v2.png` (transparent, propre — `logo_test.png` est écarté, il contient un carré noir parasite). Lockup : `8ea1daef-…png`, le seul à fond transparent.
+
+| Fichier | Taille | Contenu |
+|---|---|---|
+| `public/icons/icon-192-v2.png` · `icon-512-v2.png` | 192 / 512 | Emblème à 78 % de largeur sur `#070B14` |
+| `public/icons/icon-192.png` · `icon-512.png` | 192 / 512 | Identiques — noms conservés pour compatibilité |
+| `public/icons/icon-notif-color.png` | 192 | Emblème à 80 % |
+| `public/icons/badge-72.png` | 72 | **Silhouette blanche sur transparent** — Android applique un masque au badge de notification, une image couleur y ressort en carré noir |
+| `assets/icon.png` | 1024 | Emblème à 76 % sur `#070B14` |
+| `assets/adaptive-icon.png` | 1024 | Emblème à **55 %**, fond transparent — zone de sécurité Android, le système recadre en cercle ou squircle |
+| `assets/splash-icon.png` | 1024 | Emblème à 62 %, transparent (le fond vient de `splash.backgroundColor`) |
+| `assets/favicon.png` | 48 | Emblème à 90 % — à cette taille il doit remplir |
+| `public/logo/logo_bon.png` | 900 × 303 | Lockup complet, transparent (en-tête web) |
+| `public/logo/logo_nobackground.png` | 492 × 166 | Lockup complet, transparent (en-tête natif) |
+
+#### Configuration
+Les huit occurrences des trois fonds concurrents unifiées sur **`#070B14`** (`courtlight.bg.court`) dans `app.json`, `app.config.js` et `public/manifest.json`.
+
+#### Restant
+- `public/logo/logo_clean.png` et `assets/logo.svg` (contient `Cinzel`, retirée le 8 juillet) : suppression refusée par le montage, **à supprimer à la main**. Aucun des deux n'est référencé.
+- Les six décisions de couleur du doc 10 §6 étape 2 restent ouvertes : cyan de marque, mot en cyan, vert, rouge, orange friction, zone de respiration.
