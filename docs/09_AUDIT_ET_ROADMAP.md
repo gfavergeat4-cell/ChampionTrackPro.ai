@@ -120,9 +120,9 @@ Chaque lot a un critère de sortie vérifiable. Un lot n'est pas « fait » parc
 
 | Lot | Contenu | Critère de sortie | Statut |
 |---|---|---|---|
-| **L1** | Débloquer l'onboarding push (P0-1) + porte de rattrapage dans le profil | Un athlète sur son téléphone reçoit la notification de fin de séance **et** la relance | 🔨 code livré 31/07 — **critère non vérifié** (test appareil requis) |
-| **L2** | Rebrancher `CoachTeamScreen`, `AthleteDetailScreen`, `CoachScheduleScreen` sur `ctpApi` | Depuis le brief, le coach ouvre la fiche d'un joueur et voit sa courbe 28 j | 🔨 code livré 31/07 — critère à vérifier en session coach |
-| **L3** | Console admin — santé du système, compliance, coût (lecture seule) | Un écran répond à « le brief d'hier est-il parti pour chaque équipe ? » sans ouvrir Supabase | 🔨 code livré 31/07 — nécessite `supabase db push` (migration 010) |
+| **L1** | Débloquer l'onboarding push (P0-1) + porte de rattrapage dans le profil | Un athlète sur son téléphone reçoit la notification de fin de séance **et** la relance | ✅ **vérifié 15/08** — notification reçue, relances programmées (+3 h / +6 h) |
+| **L2** | Rebrancher `CoachTeamScreen`, `AthleteDetailScreen`, `CoachScheduleScreen` sur `ctpApi` | Depuis le brief, le coach ouvre la fiche d'un joueur et voit sa courbe 28 j | ✅ 15/08 — `CoachTeamScreen` remplacé par `CoachBoard` (lecture DAR multi-marqueurs) |
+| **L3** | Console admin — santé du système, compliance, coût (lecture seule) | Un écran répond à « le brief d'hier est-il parti pour chaque équipe ? » sans ouvrir Supabase | ✅ 15/08 — migration appliquée, onglet Health en ligne |
 | **L4** | Nettoyage admin : fusionner les doublons, retirer le code mort, corriger l'onglet Teams | Chaque onglet mène à un écran distinct et atteignable | ✅ 31/07 |
 | **L5** | Création de séance in-app avec `planned_load` / `objective` / `group_label` | Une séance créée dans l'app alimente `workload_au`, et `acwr` cesse d'être nul | ⬜ non commencé |
 | **L6** | Boucle de décision étendue (`acknowledged` / `overridden`) + export hebdomadaire | Le coach trace ce qu'il a fait d'un signal ; l'export s'ouvre dans Excel | ⬜ non commencé |
@@ -174,3 +174,19 @@ Un échec sur V2 ou V3 signifie que la chaîne de notification n'est toujours pa
 ## 11. Ce que ces lots ne changent pas
 
 Le brief reste descriptif : aucune règle n'est activée. Un coach qui ouvrirait l'app demain verrait une interface complète et cohérente qui ne lui dit toujours pas **ce qui mérite son attention**. Les lots L1-L4 rendent le produit utilisable ; ils ne le rendent pas encore utile. Cet écart se referme par une décision, pas par du code — l'activation de trois à cinq règles du doc `02`.
+
+
+---
+
+## 12. État au 15 août 2026, fin de journée
+
+**Vérifié en conditions réelles :** notification push reçue sur appareil · `session_load` et `workload_au` calculés pour la première fois · ACWR vivant (1,28 sur l'athlète en surcharge simulée) · tableau coach multi-marqueurs peuplé sur 15 athlètes et 2 mois d'historique · porte de consentement active, acceptations horodatées en base · **moteur par athlète validé à zéro écart** contre l'ancien calcul.
+
+**Fermé côté sécurité :** rôle décidé par le serveur (deux codes par équipe) · gardes d'appelant sur les edge functions · policies manquantes sur `teams` et `memberships` · `coach_feedback` en lecture-insertion seule · `create-team` réparé (il n'avait jamais fonctionné) · pseudonymes non réutilisables · suppression et export réels d'un athlète.
+
+**Reste ouvert, par ordre de valeur :**
+1. **Activer trois à cinq règles d'interprétation** (doc `02`). Sans elles le brief décrit des chiffres sans dire ce qui compte. Une heure d'expertise fondateur, et c'est ce qui sépare une démo d'un produit.
+2. Relecture juridique des trois textes — ils sont `active` mais portent un bandeau « Draft ».
+3. Confirmation d'email toujours désactivée · boîte `privacy@` inexistante · journal d'accès absent.
+4. Performance : `morning-brief` en série, `ics-sync` en série, `getAdminSystemHealth` en 8N+1, bucket journalier en UTC.
+5. Décisions visuelles : cyan de marque, seuils ±10 vs ±15 %, moyenne d'équipe vs distribution.

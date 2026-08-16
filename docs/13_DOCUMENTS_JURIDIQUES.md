@@ -116,6 +116,33 @@ AI-generated text may contain errors. It must be read alongside the underlying n
 8.3 The Institution may terminate immediately if we materially breach the Data Processing Addendum.
 8.4 On termination, data is handled as set out in the Data Processing Addendum §7.
 
+## 8bis. Fulfillment, cancellation, and refunds
+
+>> DRAFTING NOTE — Required by payment processors (Stripe, Paddle) before an account is approved. The commercial terms marked 🔶 are the founder's decision, not legal boilerplate.
+
+**8bis.1 What is delivered.** The Service is software delivered over the internet. There are no physical goods, and nothing is shipped.
+
+**8bis.2 When it is delivered.** Access is provisioned within **two (2) business days** of the later of: (a) receipt of payment or a signed purchase order, and (b) receipt of the information we need to configure the team — team name, staff contact, and training calendar. 🔶
+
+**8bis.3 What a subscription includes.** For the subscription term: unlimited athlete and staff accounts within the contracted team, daily check-in collection, the coaching dashboard, daily briefs, email support with a two-business-day response target, and all updates released during the term. 🔶
+
+**8bis.4 Term.** Subscriptions run for the term stated on the Order Form or Pilot Agreement — typically one competitive season. Unless stated otherwise, subscriptions **do not auto-renew**. 🔶
+
+**8bis.5 Cancellation.** The Institution may cancel at any time by written notice to billing@championtrackpro.com. Cancellation stops the next renewal; it does not by itself trigger a refund of the current term, except as set out in 8bis.6.
+
+**8bis.6 Refunds.** 🔶
+- **First fourteen (14) days of an initial subscription:** full refund on request, no reason required.
+- **After fourteen (14) days:** fees are non-refundable, except where we fail to provide the Service and do not remedy that failure within thirty (30) days of written notice — in which case unused fees are refunded pro rata from the date of notice.
+- Refunds are issued to the original payment method within ten (10) business days of approval.
+
+**8bis.7 Service availability.** We target 99 % monthly availability, excluding scheduled maintenance announced at least 48 hours in advance and failures of third-party infrastructure providers listed in the Subprocessor List. This is a target, not a contractual service level, unless an SLA is attached to the Order Form.
+
+**8bis.8 Prices, currency, and taxes.** Prices are quoted in **U.S. dollars** and are exclusive of any sales, use, VAT, or similar taxes. Where such taxes apply, they are added at invoicing. Institutions claiming tax exemption must provide a valid exemption certificate before invoicing. 🔶
+
+**8bis.9 Payment processing.** Card payments are processed by a third-party payment processor. We do not receive, store, or process full card numbers. The processor's own terms apply to the payment transaction.
+
+**8bis.10 Chargebacks.** If a chargeback is raised without first contacting us under 8bis.5, we may suspend access until the dispute is resolved.
+
 ## 9. Warranties and disclaimers
 
 The Service is provided "as is". To the maximum extent permitted by law, we disclaim all implied warranties, including merchantability, fitness for a particular purpose, and non-infringement. We do not warrant that the Service will be uninterrupted or error-free, or that its outputs will be accurate predictors of any athlete's performance, health, or injury risk.
@@ -253,13 +280,28 @@ Our company is established in [COUNTRY, EU]. Personnel there may access data rem
 
 ## 9. Your rights
 
-**If you are a student at a U.S. institution**, your primary rights come from FERPA and run against your institution, not against us. Under FERPA you generally have the right to inspect and review your education records, to request correction of records you believe are inaccurate or misleading, and to control certain disclosures. **These rights transfer to you at age 18 or as soon as you enroll in a postsecondary institution, whichever comes first — so an enrolled 17-year-old college athlete holds them personally.** Contact your institution's registrar or athletics compliance office.
+Which rights apply depends on where you live and, for student-athletes, on whether your data is held by your institution as an education record. Where a right applies, we honour it — regardless of whether we are strictly required to.
 
-We support your institution in responding. On its instruction we will, without charge and within thirty (30) days: provide a copy of all data we hold about you in a portable format; correct data; or delete data.
+**9.1 How to exercise any right.** Email privacy@championtrackpro.com from the address on your account, or ask your institution to contact us on your behalf. We respond within thirty (30) days. We may ask you to confirm your identity — we will not ask for more information than necessary to do so.
 
-**You may also contact us directly** at privacy@championtrackpro.com. If you contact us directly about data belonging to an institution, we will forward your request to that institution and tell you we have done so.
+**9.2 If you are in the European Economic Area or the United Kingdom (GDPR / UK GDPR).**
+- **Legal bases.** We process athlete responses on the basis of the contract with your institution (Art. 6(1)(b)) and our legitimate interest in operating the Service (Art. 6(1)(f)). Where responses touch on health, your institution is responsible for establishing the appropriate condition under Art. 9.
+- **Your rights:** access, rectification, erasure, restriction of processing, data portability, objection, and the right not to be subject to a decision based solely on automated processing. **The Service produces no automated decisions** — every decision is taken by a human member of your coaching staff.
+- **Transfers.** Data is stored in the United States. Transfers rely on the European Commission's Standard Contractual Clauses, available on request.
+- **Complaints.** You may lodge a complaint with your national supervisory authority. In France, that is the CNIL.
 
-**Additional rights.** Depending on where you live, you may have rights under state privacy laws or, where applicable, the GDPR — including access, correction, deletion, portability, and the right to lodge a complaint with a supervisory authority. Because our company is established in [COUNTRY, EU], the GDPR may apply to our processing; the competent authority is [the CNIL, France]. We do not discriminate against anyone for exercising a privacy right.
+**9.3 If you are a California resident (CCPA, as amended by the CPRA).**
+- **We do not sell your personal information, and we do not share it for cross-context behavioural advertising.** We never have.
+- **Categories collected:** identifiers (name, email), professional or education-related information (team, jersey number, position), and self-reported information about how you felt after training. See §2 for the full list, and §3 for what we deliberately do not collect.
+- **Sources:** you, and your institution.
+- **Purposes:** operating the Service for your coaching staff. See §4.
+- **Disclosure:** to the service providers listed in the Subprocessor List, under contract, for no purpose other than providing the Service.
+- **Retention:** see §8.
+- **Your rights:** to know, to delete, to correct, to limit the use of sensitive personal information, and to be free from discrimination for exercising any of them. Exercising a right will never affect your standing on the team — and any attempt to make it do so should be reported to your institution.
+- **Authorised agents** may act for you with written permission.
+- **Possible exemption.** Where your data is held by your institution as an education record under FERPA, the CCPA may not apply to it. We do not rely on that exemption to refuse a request: we treat requests on their merits.
+
+**9.4 If you are elsewhere in the United States.** Several states have adopted comparable privacy laws. We apply the rights described in 9.3 to all users, wherever they live, rather than maintaining a different standard per state.
 
 ## 10. Security
 

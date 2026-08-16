@@ -8,13 +8,14 @@ import { auth, db } from "../services/firebaseConfig";
 import { doc, getDoc, getDocFromServer, setDoc, updateDoc, increment, serverTimestamp, onSnapshot } from "firebase/firestore";
 import SplashScreen from "../src/components/SplashScreen";
 import { USE_SUPABASE } from "../src/lib/supabase";
-import { getSession as supaGetSession, onAuthChange as supaOnAuthChange, getMyMembership as supaGetMyMembership } from "../src/lib/ctpApi";
+import { getSession as supaGetSession, onAuthChange as supaOnAuthChange, getMyMembership as supaGetMyMembership, getPendingConsents as supaGetPendingConsents } from "../src/lib/ctpApi";
 import { ensurePushSubscriptionSynced, isPushOnboardingSkipped } from "../src/services/vapidPush";
 import CoachHomeSupabase from "../src/screens/CoachHomeSupabase";
 import AthleteHomeSupabase from "../src/screens/AthleteHomeSupabase";
 import ScheduleScreenSupabase from "../src/screens/ScheduleScreenSupabase";
 import ProfileScreenSupabase from "../src/screens/ProfileScreenSupabase";
 import OnboardingNotifScreen from "../src/screens/OnboardingNotifScreen";
+import ConsentGate from "../src/screens/ConsentGate";
 import CourtScene from "../src/components/CourtScene";
 
 // Import Stitch screens
@@ -424,6 +425,7 @@ function AuthGate({ pendingDeepLink, pendingJoinCode, navigationRef }) {
     authReady: false,
     roleLoading: true, // stays true until first onSnapshot confirms the role from server
     onboardingComplete: true, // default true to avoid flash for existing users
+    consentsPending: false,   // documents legaux restant a accepter (doc 12 R-04)
   });
   const unsubDocRef = React.useRef(null);
 
@@ -498,6 +500,14 @@ function AuthGate({ pendingDeepLink, pendingJoinCode, navigationRef }) {
           console.log("[SUPA] push subscribed:", subscribed, "| onboardingComplete:", onboardingComplete);
         }
 
+        // Consentements en attente. Tant que les textes sont en statut
+        // `draft`, la vue renvoie une liste vide : aucun blocage.
+        let consentsPending = false;
+        try {
+          const pending = await supaGetPendingConsents();
+          consentsPending = (pending?.length ?? 0) > 0;
+        } catch (e) { console.warn("[SUPA] consents check failed:", e?.message); }
+
         if (!done) setState({
           loading: false,
           user: { uid: sessUser.id, email: sessUser.email, displayName: sessUser.email },
@@ -505,6 +515,7 @@ function AuthGate({ pendingDeepLink, pendingJoinCode, navigationRef }) {
           authReady: true,
           roleLoading: false,
           onboardingComplete,
+          consentsPending,
         });
       };
       supaGetSession().then(({ data }) => applyUser(data?.session?.user ?? null));
@@ -619,6 +630,11 @@ function AuthGate({ pendingDeepLink, pendingJoinCode, navigationRef }) {
   // Prevents coach being rendered as athlete on first load (role race condition).
   if (state.user && state.roleLoading) {
     return <SplashScreen />;
+  }
+
+  // Rien ne s'affiche avant l'acceptation : ni brief, ni check-in, ni roster.
+  if (state.user && state.consentsPending) {
+    return <ConsentGate onDone={() => setState((p) => ({ ...p, consentsPending: false }))} />;
   }
 
   return (

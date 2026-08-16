@@ -392,6 +392,47 @@ export async function createTeam(name: string, sport: string) {
   return j;
 }
 
+// ── Consentements (doc 12 R-04, doc 14 P1-7) ─────────────────
+export interface PendingConsent {
+  key: string;
+  version: string;
+  title: string;
+  url: string;
+  summary: string | null;
+  effective_at: string;
+}
+
+/**
+ * Documents que l'utilisateur courant doit encore accepter.
+ * Ne remonte que les documents en statut `active` : tant que les textes
+ * n'ont pas été relus par un avocat, ils restent en `draft` et cette
+ * fonction renvoie une liste vide — donc aucun blocage.
+ */
+export async function getPendingConsents(): Promise<PendingConsent[]> {
+  return safe(db().from("v_my_pending_consents").select("*"), [] as PendingConsent[]);
+}
+
+/** Enregistre l'acceptation. Une ligne par document et par version, horodatée et immuable. */
+export async function acceptConsents(docs: { key: string; version: string }[]) {
+  const { data: { user } } = await db().auth.getUser();
+  if (!user) throw new Error("not signed in");
+  if (!docs.length) return { ok: true };
+  const { error } = await db().from("user_consents").insert(
+    docs.map((d) => ({ user_id: user.id, doc_key: d.key, version: d.version })),
+  );
+  if (error) throw error;
+  return { ok: true };
+}
+
+/** Tous les textes publiés, pour l'écran d'inscription et les liens de pied de page. */
+export async function getLegalDocuments() {
+  const { data } = await db().from("legal_documents")
+    .select("key, version, title, url, summary, status, effective_at")
+    .neq("status", "retired")
+    .order("key");
+  return data ?? [];
+}
+
 // ── Lecture coach multi-marqueurs (méthode DAR, doc 15) ──────
 export type Zone = "GREEN" | "BLUE" | "YELLOW" | "INSUFFICIENT_DATA";
 export type Axis = "PHY" | "TEC" | "MEN" | "ACA";

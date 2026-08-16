@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Athlete Notice - ChampionTrackPro</title>
+<link rel="icon" href="/icons/icon-192-v2.png">
+<style>
+ body{margin:0;background:#0B0F1A;color:rgba(255,255,255,.88);
+   font:16px/1.7 Inter,system-ui,-apple-system,sans-serif;}
+ .wrap{max-width:760px;margin:0 auto;padding:48px 24px 96px;}
+ header{border-bottom:1px solid rgba(0,224,255,.15);padding-bottom:20px;margin-bottom:32px;}
+ .brand{font-size:12px;letter-spacing:.22em;color:rgba(154,163,178,.7);text-transform:uppercase;}
+ h1{font-size:28px;font-weight:500;margin:8px 0 4px;color:#fff;}
+ .ver{font-size:13px;color:rgba(154,163,178,.6);}
+ h2{font-size:19px;font-weight:500;margin:36px 0 10px;color:#fff;}
+ h3{font-size:16px;font-weight:500;margin:26px 0 8px;color:rgba(255,255,255,.92);}
+ h4{font-size:15px;font-weight:500;margin:20px 0 6px;color:rgba(255,255,255,.85);}
+ p,li{color:rgba(255,255,255,.78);}
+ ul{padding-left:22px;} li{margin:6px 0;}
+ a{color:#00E0FF;}
+ code{background:rgba(255,255,255,.06);padding:2px 6px;border-radius:4px;font-size:14px;}
+ pre{background:rgba(255,255,255,.04);padding:14px;border-radius:8px;overflow:auto;font-size:13px;}
+ .draft{background:rgba(255,184,0,.08);border:1px solid rgba(255,184,0,.3);
+   border-radius:10px;padding:14px 16px;margin-bottom:28px;font-size:14px;color:#FFD37A;}
+ footer{margin-top:56px;padding-top:20px;border-top:1px solid rgba(255,255,255,.07);
+   font-size:13px;color:rgba(154,163,178,.55);}
+</style></head><body><div class="wrap">
+<header>
+  <div class="brand">ChampionTrackPro</div>
+  <h1>Athlete Notice</h1>
+  <div class="ver">Version 1.0 &middot; Effective August 15, 2026</div>
+</header>
+<div class="draft"><strong>Draft.</strong> This document has not yet been reviewed by
+qualified U.S. counsel. It is published for transparency and is not yet binding.</div>
+<p><strong>Draft v0.1 — not legally reviewed.</strong></p>
+<h2>3.1 Context — what exists today</h2>
+<p>The application currently shows athletes exactly one sentence, on the push-notification onboarding screen (<code>src/screens/OnboardingNotifScreen.tsx:273-275</code>), rendered in 11px type at 25% opacity:</p>
+<p>&gt; *&quot;Your data is used solely for performance tracking by your coaching staff. You may request deletion at any time. FERPA rights apply.&quot;*</p>
+<p><strong>Assessment.</strong> The content is honest and the intent is right. Three problems: it is placed on a notifications screen rather than at account creation; it is styled to be unreadable; and &quot;FERPA rights apply&quot; tells an athlete nothing actionable. Most importantly, it <strong>does not say the one thing that matters</strong> — that the coaching staff sees the answers about pain, stress, and mental state, by name.</p>
+<h2>3.2 Proposed replacement — full screen, shown once at signup, before the first check-in</h2>
+<p>Requires an explicit tap to continue. Body text minimum 14px at full contrast. Acceptance timestamp and version recorded.</p>
+<p>---</p>
+<h3><strong>Before you start — how your answers are used</strong></h3>
+<p><strong>What you&#x27;ll do.</strong> After each session you&#x27;ll answer about 60 seconds of questions about how you feel — energy, legs, focus, and whether anything is bothering you.</p>
+<p><strong>Who sees your answers.</strong> <strong>Your coaching staff sees your answers, with your name on them.</strong> That includes what you say about soreness, stress, and how you&#x27;re feeling mentally. This is not anonymous and it is not private from your coaches. If that changes what you want to write, that&#x27;s your call to make — but make it knowing this.</p>
+<p><strong>Who does NOT see your answers.</strong></p>
+<ul>
+<li>Your teammates never see your answers.</li>
+<li>No other team and no other school ever sees them.</li>
+<li>Our AI writes the daily summary using a code (like &quot;P-01&quot;) instead of your name. <strong>The AI never sees who you are.</strong></li>
+<li>We never sell your data. We never use it for advertising.</li>
+</ul>
+<p><strong>What we don&#x27;t collect.</strong> No grades. No medical records. No heart rate, sleep tracking, GPS, or wearables. No location. No camera or microphone. Only what you type in yourself.</p>
+<p><strong>What this is not.</strong> This is a training tool, not a health service. It doesn&#x27;t diagnose anything and it doesn&#x27;t decide whether you play. <strong>It does not alert anyone in real time.</strong> If you are struggling — with an injury, with stress, or with your mental health — please talk to your athletic trainer, your team physician, or your school&#x27;s counseling services. <strong>[SCHOOL CRISIS / COUNSELING CONTACT]</strong></p>
+<p><strong>Your rights.</strong> You can ask to see everything we hold about you, ask us to correct it, or ask us to delete it. Contact your athletics compliance office or email us at privacy@championtrackpro.com. As an enrolled college student you hold these rights yourself, whatever your age.</p>
+<p><strong>Honest answers only help you if they&#x27;re honest.</strong> The system compares you to *your own* baseline, not to your teammates. Inflating your numbers just moves your baseline.</p>
+<p>[ ] <strong>I&#x27;ve read this and I understand my coaching staff will see my answers.</strong></p>
+<p><strong>[ I understand — continue ]</strong>   ·   [Read the full Privacy Policy]</p>
+<p>---</p>
+<h2>3.3 Short in-app reminder (footer of the check-in screen, every time)</h2>
+<p>&gt; *Your coaching staff sees these answers. Not a medical or crisis service — if you need help now, contact [SCHOOL RESOURCE].*</p>
+<p>---</p>
+<p>---</p>
+<footer>Questions about this document: privacy@championtrackpro.com</footer>
+</div></body></html>

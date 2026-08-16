@@ -34,19 +34,29 @@ async function pushToUsers(
   let sent = 0, failed = 0, cleaned = 0;
   const toDelete: string[] = [];
 
-  for (const sub of subs) {
-    try {
-      const r: SendResult = await sendPush(
-        { endpoint: sub.endpoint, p256dh: sub.p256dh, authKey: sub.auth_key },
-        payload,
-      );
+  // Envois par paquets de 20 en parallele (doc 11 P1-4). En sequentiel, une
+  // equipe de quinze prenait plusieurs secondes ; avec cinquante equipes le
+  // cron d'une minute etait depasse et les notifications sautaient.
+  const BATCH = 20;
+  for (let i = 0; i < subs.length; i += BATCH) {
+    const slice = subs.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      slice.map((sub) =>
+        sendPush({ endpoint: sub.endpoint, p256dh: sub.p256dh, authKey: sub.auth_key }, payload)
+      ),
+    );
+    results.forEach((res, k) => {
+      const sub = slice[k];
+      if (res.status === "rejected") {
+        console.error(`[SW] push error: ${sub.endpoint}`, String(res.reason));
+        failed++;
+        return;
+      }
+      const r = res.value as SendResult;
       if (r.ok) sent++;
       else if (r.gone) { toDelete.push(sub.id); cleaned++; }
-      else { console.error(`[SW] push ${sub.endpoint} → ${r.status}`); failed++; }
-    } catch (e) {
-      console.error(`[SW] push error: ${sub.endpoint}`, String(e));
-      failed++;
-    }
+      else { console.error(`[SW] push ${sub.endpoint} -> ${r.status}`); failed++; }
+    });
   }
 
   if (toDelete.length) {
@@ -85,11 +95,17 @@ Deno.serve(async (req) => {
 
   // ── Phase A: Detect ended sessions ────────────────────────
   const now = new Date();
-  const twoMinAgo = new Date(now.getTime() - 2 * 60 * 1000);
+  // Fenetre de rattrapage de 3 h (doc 11 P0-6). Avec 2 minutes, un seul tick
+  // de cron manque — deploiement, demarrage a froid, incident — et TOUTE une
+  // equipe rate son check-in, en silence. `notified_at is null` garantit
+  // l'idempotence : une seance deja notifiee ne l'est jamais deux fois.
+  // 3 h et pas plus : au-dela, la fenetre de reponse est presque close et
+  // notifier ne servirait qu'a agacer.
+  const catchUpFrom = new Date(now.getTime() - 3 * 60 * 60 * 1000);
 
   const { data: endedSessions } = await supa.from("sessions")
-    .select("id, team_id, title")
-    .gte("end_utc", twoMinAgo.toISOString())
+    .select("id, team_id, title, end_utc")
+    .gte("end_utc", catchUpFrom.toISOString())
     .lte("end_utc", now.toISOString())
     .is("notified_at", null)
     .eq("cancelled", false);
@@ -128,7 +144,9 @@ Deno.serve(async (req) => {
         team_id: session.team_id,
         session_id: session.id,
         user_id: uid,
-        remind_at: new Date(now.getTime() + offsetMs).toISOString(),
+        // Ancre sur la fin de seance, pas sur l'instant du cron : avec le
+        // rattrapage, `now` peut etre jusqu'a 3 h apres la fin.
+        remind_at: new Date(new Date(session.end_utc).getTime() + offsetMs).toISOString(),
         attempt: i + 1,
         status: "pending",
       }))

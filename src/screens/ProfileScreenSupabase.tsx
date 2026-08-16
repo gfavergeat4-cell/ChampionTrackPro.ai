@@ -1,5 +1,7 @@
 // ProfileScreenSupabase.tsx — Profil athlète Supabase (parité StitchProfileScreen)
-// Affichage/édition profil, notification status, LOGOUT Supabase, Courtlight styling.
+// Affichage/edition profil, etat des notifications, logout Supabase.
+// DA : identique a AthleteHomeNew et ScheduleScreenNew (meme coquille,
+// meme degrade, memes cartes en verre, meme en-tete de marque).
 import React from "react";
 import {
   View, Text, ScrollView, Pressable, TextInput, RefreshControl,
@@ -14,21 +16,29 @@ import {
   clearPushOnboardingSkipped,
 } from "../services/vapidPush";
 import { courtlight as cl } from "../theme/tokens";
+import MobileViewport from "../components/MobileViewport";
+import BrandHeader from "../components/BrandHeader";
 
-// DA athlète — alignée sur l'écran de check-in (modèle validé par le fondateur).
-// Les écrans athlète partagent désormais une seule palette : fond dégradé
-// #0B0F1A -> #020409, cartes #141A24 avec liseré cyan interne, accent #00E0FF.
 const P = {
-  bgTop: "#0B0F1A",
-  bgBottom: "#020409",
-  card: "#141A24",
-  ring: "rgba(0,224,255,0.10)",
+  // DA athlète — RELEVÉE sur AthleteHomeNew et ScheduleScreenNew, qui font
+  // référence pour cet onglet. Le profil suivait la palette du check-in
+  // (#141A24, liseré cyan interne) : proche, mais visiblement différente.
+  shell: "#0A0F1A",
+  backdrop:
+    "linear-gradient(180deg, #0E1528 0%, #090F1F 35%, #050910 100%), " +
+    "radial-gradient(circle at 50% 0%, rgba(0, 224, 255, 0.08) 0%, rgba(0, 0, 0, 0) 55%), " +
+    "radial-gradient(circle at 0% 100%, rgba(74, 103, 255, 0.12) 0%, rgba(0, 0, 0, 0) 60%)",
+  // Cartes en verre, identiques à celles de Home
+  card: "rgba(255, 255, 255, 0.06)",
+  cardBorder: "rgba(0, 224, 255, 0.35)",
+  cardShadow: "0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 22px rgba(0, 224, 255, 0.04)",
+  radius: 18,
   accent: "#00E0FF",
   accentDeep: "#4A67FF",
-  textHi: "rgba(255,255,255,0.9)",
+  textHi: "rgba(255,255,255,0.92)",
   textMid: "rgba(154,163,178,0.7)",
   textLow: "rgba(154,163,178,0.45)",
-  inactive: "#1E222D",
+  inactive: "rgba(255,255,255,0.08)",
 };
 
 // ── Skeleton (doc 06 section 6) ──
@@ -65,7 +75,7 @@ function BottomTabBar({ active }: { active: "Home" | "Schedule" | "Profile" }) {
       left: "50%",
       transform: "translateX(-50%)",
       width: "100%",
-      maxWidth: 430,
+      maxWidth: 375,
       background: "rgba(7,11,20,0.95)",
       backdropFilter: "blur(30px)",
       WebkitBackdropFilter: "blur(30px)",
@@ -284,8 +294,27 @@ export default function ProfileScreenSupabase() {
     );
   }
 
+  // Même coquille que Home et Schedule : viewport mobile, dégradé de fond
+  // avec ses deux halos, en-tête de marque. C'est ce qui manquait ici.
   return (
-    <>
+    <MobileViewport>
+      <div style={{
+        width: "100%", maxWidth: "375px", height: "812px",
+        backgroundColor: P.shell, overflow: "hidden", position: "relative",
+        display: "flex", flexDirection: "column", alignItems: "center",
+        fontFamily: "'Inter', sans-serif", color: "white",
+        margin: "0 auto", boxSizing: "border-box",
+      }}>
+        <div style={{
+          position: "absolute", width: "100%", height: "100%",
+          background: P.backdrop, zIndex: 0, pointerEvents: "none",
+        }} />
+        <div style={{
+          position: "relative", zIndex: 1, width: "100%",
+          display: "flex", justifyContent: "center", alignItems: "center",
+        }}>
+          <BrandHeader />
+        </div>
       <ScrollView
         style={s.scroll}
         contentContainerStyle={s.container}
@@ -474,22 +503,23 @@ export default function ProfileScreenSupabase() {
         </Text>
       </ScrollView>
 
-      {/* Bottom tab bar */}
-      <BottomTabBar active="Profile" />
-    </>
+        {/* Bottom tab bar */}
+        <BottomTabBar active="Profile" />
+      </div>
+    </MobileViewport>
   );
 }
 
 const s = StyleSheet.create({
   scroll: {
     flex: 1,
-    ...(Platform.OS === "web"
-      ? { background: `linear-gradient(to bottom, ${P.bgTop}, ${P.bgBottom})` }
-      : { backgroundColor: P.bgTop }),
+    width: "100%",
+    backgroundColor: "transparent",
+    zIndex: 1,
   },
   container: {
     padding: 18,
-    paddingTop: 52,
+    paddingTop: 12,
     paddingBottom: 120,
     maxWidth: 430,
     alignSelf: "center" as any,
@@ -543,12 +573,12 @@ const s = StyleSheet.create({
   card: {
     backgroundColor: P.card,
     borderWidth: 1,
-    borderColor: "rgba(0,224,255,0.10)",
-    borderRadius: 16,
-    padding: 20,
+    borderColor: P.cardBorder,
+    borderRadius: P.radius,
+    padding: 18,
     marginTop: 12,
     ...(Platform.OS === "web"
-      ? { boxShadow: `inset 0 0 0 1px ${P.ring}` }
+      ? { boxShadow: P.cardShadow, backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)" }
       : {}),
   },
   miniLabel: {

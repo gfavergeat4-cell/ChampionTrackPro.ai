@@ -409,3 +409,68 @@ Point d'entrée unique, qui vérifie côté serveur que l'appelant est **admin d
 1. Coller `016_pseudonyms_and_purge.sql`.
 2. `supabase functions deploy admin-purge` et `supabase functions deploy join-team`.
 3. Aucun changement d'interface : les fonctions de purge sont disponibles dans `ctpApi` mais pas encore câblées à un bouton. Volontaire — un bouton « supprimer définitivement » mérite sa propre confirmation à double saisie.
+
+### Bloc 15 — Conditions d'utilisation et preuve de consentement (15 août 2026)
+
+Doc 12 R-04, doc 14 P1-7. Jusqu'ici, **rien ne prouvait qu'un utilisateur ait jamais vu le moindre texte** : le seul élément d'information était un `<div>` statique dans l'écran d'onboarding, non tracé.
+
+#### Migration 017
+- **`legal_documents`** (clé, version, titre, URL, résumé, date d'effet, rôles concernés, statut). Lisible sans être connecté — l'écran d'inscription en a besoin.
+- **`user_consents`** (utilisateur, document, version, horodatage). **Immuable par construction** : aucune policy UPDATE ni DELETE. Un consentement est un fait daté, il ne se modifie pas. Un admin peut lire les consentements de son équipe — sans quoi il ne peut rien prouver.
+- **`v_my_pending_consents`** : ce qui reste à accepter pour l'utilisateur courant, filtré par son rôle.
+- Seed des trois documents en **v1.0, statut `draft`**.
+
+**Le statut est le point important.** Les textes du doc 13 n'ont pas été relus par un avocat. En `draft`, ils sont publiés et consultables mais **jamais imposés** : la vue renvoie une liste vide, l'application se comporte exactement comme avant. Une seule commande les rend opposables, et c'est une décision, pas un effet de bord :
+
+```sql
+update legal_documents set status = 'active' where version = 'v1.0';
+```
+
+#### Pages publiques
+`public/legal/terms.html`, `privacy.html`, `athlete-notice.html`, générées depuis les sections 1 à 3 du doc 13. Mise en page Courtlight, bandeau « Draft — not yet reviewed by counsel » en tête, adresse `privacy@` en pied. Les blocs `>> DRAFTING NOTE` destinés à l'avocat sont retirés à la génération.
+
+#### Écran `ConsentGate.tsx`
+Rendu par `AuthGate` **avant tout écran de données** — ni brief, ni check-in, ni roster tant que ce n'est pas accepté. Une case à cocher **par document**, pas un « en continuant vous acceptez » : un consentement obtenu par inadvertance ne vaut rien devant un juriste universitaire. Lien vers chaque texte, version et date d'effet affichées, et une sortie « Sign out instead » — refuser doit rester possible.
+
+#### Couche d'accès
+`getPendingConsents()`, `acceptConsents()`, `getLegalDocuments()`.
+
+#### Action requise — Gabin
+1. Coller `017_consents.sql`.
+2. `npm run web:build`, commit, push. **Aucun changement visible** : les documents sont en `draft`.
+3. Ouvrir `/legal/terms.html` sur le site déployé pour vérifier le rendu.
+4. Faire relire les trois textes par un avocat américain, puis basculer en `active`.
+
+#### Ce qui manque encore côté conformité
+Boîte `privacy@championtrackpro.com` à créer (elle est citée dans les trois documents) · confirmation d'email toujours désactivée · journal d'accès aux données d'athlète (14 P1-4) · politique de rétention exécutée (14 P1-1) · MFA staff (14 P1-2).
+
+### Bloc 16 — Performance du moteur et fiabilité des notifications (15 août 2026)
+
+Trois défauts dont **deux ont été observés en conditions réelles aujourd'hui**, pas déduits d'une lecture de code.
+
+#### Migration 018 — `f_engine_user(uuid)` (doc 11 P1-1)
+PostgreSQL ne pousse jamais un prédicat dans une `WITH RECURSIVE`. Interroger `v_engine` pour un athlète recalculait donc d'abord la série complète de **tous les athlètes de tous les clients**, puis filtrait.
+
+**Preuve du jour** : l'insertion des 1 206 réponses de démonstration a déclenché autant d'appels webhook ; `daily_metrics` s'est remplie sur **18 lignes au lieu de 780**. Le reste a dû être reconstruit à la main par un `insert … from v_engine`.
+
+`f_engine_user` fait le même calcul, borné à un athlète. Formules et constantes recopiées à l'identique des migrations 003 et 008 — alpha 0,0690, carry-forward, zones ±15 %, fenêtres 7 j et 28 j. **Aucun seuil modifié.** Une requête de non-régression est fournie en fin de migration : elle compare ligne à ligne l'ancien et le nouveau calcul et doit renvoyer zéro écart. `compute-metrics` bascule sur la fonction.
+
+#### Migration 019 — fenêtre de réponse 5 h → 8 h (doc 11 P0-5)
+Les relances partent à +3 h et +6 h après la séance ; la policy d'insertion fermait à +5 h. **L'athlète recevait la relance de 6 h, remplissait ses soixante secondes, et prenait un refus** — sans message d'erreur, juste un échec.
+
+Des deux valeurs, c'est la fenêtre qui était arbitraire : elle a été inventée en V2, alors que les timings de relance viennent de la version éprouvée. On aligne donc la fenêtre. 8 h = dernière relance + 2 h pour répondre. Un commentaire sur la policy rappelle l'invariant : la fenêtre doit rester strictement supérieure au dernier offset de relance.
+
+#### `session-watcher` — trois corrections
+**Rattrapage de 3 h** (P0-6). La fenêtre de détection était de 2 minutes : un seul tick de cron manqué — déploiement, démarrage à froid, incident — et toute une équipe ratait son check-in, en silence. Portée à 3 h ; `notified_at is null` garantit qu'une séance n'est jamais notifiée deux fois. Pas au-delà de 3 h : la fenêtre de réponse serait presque close et notifier ne servirait qu'à agacer.
+
+**Relances ancrées sur la fin de séance**, plus sur l'instant du cron. Avec le rattrapage, `now` peut être jusqu'à trois heures après la fin — les relances auraient dérivé d'autant.
+
+**Envois push par paquets de 20 en parallèle** (P1-4). En séquentiel, une équipe de quinze prenait plusieurs secondes ; à cinquante équipes le cron d'une minute était dépassé et les notifications sautaient.
+
+#### Action requise — Gabin
+1. Coller `018_engine_per_user.sql` puis `019_response_window.sql`.
+2. **Exécuter la requête de non-régression** commentée en fin de 018 avant de considérer la bascule faite. Elle doit renvoyer zéro ligne.
+3. `supabase functions deploy compute-metrics` et `supabase functions deploy session-watcher`.
+
+#### Reste au backlog performance
+`morning-brief` enchaîne les appels LLM en série dans une seule invocation (P1-2) · `ics-sync` traite tous les calendriers en série (P1-3) · `getAdminSystemHealth` fait 8 requêtes par équipe (P1-6) · bucket journalier en UTC alors que `teams.timezone` existe et n'est jamais lu (P1-7) · `ics-sync` n'annule jamais une séance retirée du calendrier (P1-8).

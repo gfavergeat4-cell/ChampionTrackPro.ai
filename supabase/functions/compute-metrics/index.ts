@@ -25,14 +25,14 @@ Deno.serve(async (req) => {
   const { record } = await req.json(); // webhook payload: la réponse insérée
   const { user_id, team_id } = record;
 
-  // 1) CALCUL — relit la vue moteur (port SQL des calculs existants)
+  // 1) CALCUL — fonction bornee a CET athlete (doc 11 P1-1, migration 018).
+  //    `v_engine` recalculait d'abord toute la base avant de filtrer :
+  //    PostgreSQL ne pousse pas un predicat dans une WITH RECURSIVE.
   const { data: engine, error } = await supa
-    .from("v_engine").select("*")
-    .eq("user_id", user_id)
-    .order("day", { ascending: false })
-    .limit(1);
+    .rpc("f_engine_user", { p_user: user_id });
   if (error) return new Response(error.message, { status: 500 });
-  const m = engine?.[0];
+  const rows = (engine ?? []) as Record<string, unknown>[];
+  const m = rows.length ? rows[rows.length - 1] as any : null;   // f_engine_user trie par jour
   if (!m) return new Response("no data", { status: 200 });
 
   // 1bis) Sous-scores par axe (doc 15 §6) — lus depuis v_daily_axes, qui
