@@ -17,7 +17,13 @@ import {
 } from "../services/vapidPush";
 import { courtlight as cl } from "../theme/tokens";
 import MobileViewport from "../components/MobileViewport";
-import BrandHeader from "../components/BrandHeader";
+import UnifiedAthleteNavigation from "../stitch_components/UnifiedAthleteNavigation";
+
+// Postes NCAA. Liste figée : une saisie libre produit "PG", "Point guard",
+// "1" et "Meneur" pour le même poste, et rend tout regroupement impossible.
+const POSITIONS = [
+  "Point Guard", "Shooting Guard", "Small Forward", "Power Forward", "Center",
+] as const;
 
 const P = {
   // DA athlète — RELEVÉE sur AthleteHomeNew et ScheduleScreenNew, qui font
@@ -41,6 +47,22 @@ const P = {
   inactive: "rgba(255,255,255,0.08)",
 };
 
+// Chrome ignore scrollbarWidth : il faut la pseudo-classe WebKit.
+// Injectee une fois, comme le fait LogoSlider.
+const HIDE_SCROLLBAR_ID = "ctp-hide-scrollbar";
+function useHideScrollbar() {
+  React.useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (document.getElementById(HIDE_SCROLLBAR_ID)) return;
+    const el = document.createElement("style");
+    el.id = HIDE_SCROLLBAR_ID;
+    el.textContent =
+      ".ctp-noscroll::-webkit-scrollbar{width:0;height:0;display:none}" +
+      ".ctp-noscroll{scrollbar-width:none;-ms-overflow-style:none}";
+    document.head.appendChild(el);
+  }, []);
+}
+
 // ── Skeleton (doc 06 section 6) ──
 function Skeleton({ width = "70%" }: { width?: string | number }) {
   const shimmer = React.useRef(new Animated.Value(0)).current;
@@ -57,83 +79,9 @@ function Skeleton({ width = "70%" }: { width?: string | number }) {
   return <Animated.View style={[s.skeleton, { width, backgroundColor: bg }]} />;
 }
 
-// ── Bottom tab bar (parité UnifiedAthleteNavigation) ──
-function BottomTabBar({ active }: { active: "Home" | "Schedule" | "Profile" }) {
-  const navigation = useNavigation<any>();
-  if (Platform.OS !== "web") return null;
-
-  const tabs = [
-    { id: "Home" as const, label: "Home" },
-    { id: "Schedule" as const, label: "Schedule" },
-    { id: "Profile" as const, label: "Profile" },
-  ];
-
-  return (
-    <div style={{
-      position: "fixed",
-      bottom: 0,
-      left: "50%",
-      transform: "translateX(-50%)",
-      width: "100%",
-      maxWidth: 375,
-      background: "rgba(7,11,20,0.95)",
-      backdropFilter: "blur(30px)",
-      WebkitBackdropFilter: "blur(30px)",
-      borderTop: "0.5px solid rgba(0,224,255,0.18)",
-      padding: "8px 12px 12px",
-      paddingBottom: "max(12px, env(safe-area-inset-bottom))",
-      zIndex: 10000,
-      display: "flex",
-      justifyContent: "center",
-      gap: 20,
-    }}>
-      {tabs.map((tab) => {
-        const isActive = active === tab.id;
-        return (
-          <button
-            key={tab.id}
-            onClick={() => {
-              if (tab.id !== active) navigation.navigate(tab.id);
-            }}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 3,
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              padding: "6px 12px",
-              color: isActive ? P.accent : P.textMid,
-            }}
-          >
-            <span style={{
-              fontSize: 10,
-              fontWeight: isActive ? "600" : "400",
-              fontFamily: cl.type.ui,
-              color: isActive ? P.accent : P.textMid,
-              textShadow: isActive ? `0 0 4px rgba(0,224,255,0.3)` : "none",
-            }}>
-              {tab.label}
-            </span>
-            {isActive && (
-              <div style={{
-                height: 2,
-                width: 22,
-                background: P.accent,
-                borderRadius: 1,
-                boxShadow: "0 0 6px rgba(0,224,255,0.5)",
-              }} />
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // ── Main component ──
 export default function ProfileScreenSupabase() {
+  useHideScrollbar();
   const navigation = useNavigation<any>();
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -309,15 +257,10 @@ export default function ProfileScreenSupabase() {
           position: "absolute", width: "100%", height: "100%",
           background: P.backdrop, zIndex: 0, pointerEvents: "none",
         }} />
-        <div style={{
-          position: "relative", zIndex: 1, width: "100%",
-          display: "flex", justifyContent: "center", alignItems: "center",
-        }}>
-          <BrandHeader />
-        </div>
       <ScrollView
         style={s.scroll}
         contentContainerStyle={s.container}
+        {...(Platform.OS === "web" ? { className: "ctp-noscroll" } as any : {})}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -327,7 +270,6 @@ export default function ProfileScreenSupabase() {
         }
       >
         {/* Header */}
-        <Text style={s.brand}>CHAMPION<Text style={s.brandAccent}>TRACK</Text>PRO</Text>
         <Text style={s.headerTitle}>Profile</Text>
 
         {/* ── Avatar placeholder ── */}
@@ -379,13 +321,34 @@ export default function ProfileScreenSupabase() {
           {/* Position */}
           <Text style={s.fieldLabel}>Position</Text>
           {editing ? (
-            <TextInput
+            <select
               value={editPosition}
-              onChangeText={setEditPosition}
-              placeholder="e.g. Guard, Forward, Center"
-              placeholderTextColor={P.textLow}
-              style={s.input}
-            />
+              onChange={(e) => setEditPosition(e.target.value)}
+              style={{
+                width: "100%",
+                marginTop: 6,
+                marginBottom: 4,
+                padding: "12px 14px",
+                borderRadius: 12,
+                background: "rgba(255,255,255,0.06)",
+                border: `1px solid ${P.cardBorder}`,
+                color: P.textHi,
+                fontFamily: "'Inter', sans-serif",
+                fontSize: 15,
+                appearance: "none",
+                WebkitAppearance: "none",
+                cursor: "pointer",
+                backgroundImage:
+                  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2300E0FF' stroke-width='2.5' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>\")",
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: "right 14px center",
+              }}
+            >
+              <option value="" style={{ background: "#0E1528" }}>Select a position</option>
+              {POSITIONS.map((pos) => (
+                <option key={pos} value={pos} style={{ background: "#0E1528" }}>{pos}</option>
+              ))}
+            </select>
           ) : (
             <Text style={s.fieldValue}>{position || "Not set"}</Text>
           )}
@@ -503,8 +466,11 @@ export default function ProfileScreenSupabase() {
         </Text>
       </ScrollView>
 
-        {/* Bottom tab bar */}
-        <BottomTabBar active="Profile" />
+        {/* Navigation unifiée — le composant EXACT de Home et Schedule */}
+        <UnifiedAthleteNavigation
+          activeTab="Profile"
+          onNavigate={(tab) => { if (tab !== "Profile") navigation.navigate(tab); }}
+        />
       </div>
     </MobileViewport>
   );
@@ -516,6 +482,11 @@ const s = StyleSheet.create({
     width: "100%",
     backgroundColor: "transparent",
     zIndex: 1,
+    // Home et Schedule masquent la barre de defilement : sur un ecran de
+    // 375 px cadre comme un telephone, elle traverse l'interface.
+    ...(Platform.OS === "web"
+      ? { scrollbarWidth: "none", msOverflowStyle: "none" } as any
+      : {}),
   },
   container: {
     padding: 18,
@@ -524,18 +495,6 @@ const s = StyleSheet.create({
     maxWidth: 430,
     alignSelf: "center" as any,
     width: "100%",
-  },
-  brand: {
-    fontFamily: "Marcellus_400Regular",
-    fontSize: 12,
-    letterSpacing: 4,
-    color: P.textMid,
-    textAlign: "center" as any,
-    marginBottom: 4,
-  },
-  brandAccent: {
-    color: P.accent,
-    fontWeight: "600",
   },
   headerTitle: {
     fontSize: 24,
