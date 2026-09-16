@@ -1,4 +1,8 @@
 # CLAUDE.md — ChampionTrackPro V2 · Document-mère
+
+> **NOUVEAU SUR CE PROJET ?** Commence par `HANDOFF/CLAUDE_CODE_HANDOFF.md`, pas par ce fichier.
+> Le dossier `HANDOFF/` contient la passation complète : source de vérité, bugs et solutions échouées,
+> décisions d'architecture, matrice de fonctionnalités, liste de ce qu'il ne faut pas casser.
 **Tu es le développeur senior de ce produit. Ce fichier t'oriente ; les détails vivent dans les documents référencés. Ordre de lecture au premier lancement : ce fichier → `CONSTITUTION.md` → `docs/01` → le bloc sur lequel tu travailles.**
 
 ---
@@ -15,10 +19,11 @@ Système d'aide à la décision pour staffs de basketball NCAA : check-in athlè
 6. Auditer avant de modifier ; produit fonctionnel à chaque commit ; les chemins Firebase restent intacts derrière `if (USE_SUPABASE)` jusqu'à l'étape M8.
 
 ## 2bis. LOI DE PARITÉ (15 juil. — prime sur toute interprétation)
-L'ancienne version en ligne (`C:\GAB\PRO\ChampionTrackPro_-main`) fait foi pour fonctionnalités, écrans, questionnaires, textes et timings de notifications, workflows et console admin. V2 = copie exacte nettoyée + backend SQL + améliorations validées par Gabin (Courtlight). Ne JAMAIS improviser un contenu ou une règle qui existe déjà dans l'ancien code : ouvrir, copier, nettoyer. Détail et matrice : `docs/07_CONTRAT_DE_PARITE.md`.
+L'ancienne version en ligne (`APP/ChampionTrackPro-LIVE`, dépôt `ChampionTrackPro_`, domaine `champtrackpro.com`) fait foi pour fonctionnalités, écrans, questionnaires, textes et timings de notifications, workflows et console admin. V2 = copie exacte nettoyée + backend SQL + améliorations validées par Gabin (Courtlight). Ne JAMAIS improviser un contenu ou une règle qui existe déjà dans l'ancien code : ouvrir, copier, nettoyer. Détail et matrice : `docs/07_CONTRAT_DE_PARITE.md`.
 
 ## 3. Cartographie du repo
 ```
+HANDOFF/                 ← ★ DOSSIER DE PASSATION — à lire en premier si tu reprends le projet
 CLAUDE.md                ← ce fichier
 CONSTITUTION.md          ← lois + amendements datés
 GUIDE_ACTIONS_GABIN.md   ← checklist manuelle du fondateur
@@ -35,12 +40,16 @@ docs/
   09_AUDIT_ET_ROADMAP.md             ← manques constatés + séquence L1-L7 avec critères de sortie
   CHANGELOG_IMPLEMENTATION.md        ← journal des modifs (À TENIR À JOUR à chaque session)
 supabase/
-  migrations/001-008     ← schéma, RLS, moteur SQL (EMA/zones/z-score), seeds, RPC
-  functions/             ← compute-metrics · morning-brief · join-team · ics-sync (+ _shared/llm.ts)
+  migrations/001-019     ← schéma, RLS, moteur SQL, seeds, push, questionnaires NCAA,
+                            durcissement, purge, consentements, moteur par athlète
+  functions/             ← compute-metrics · morning-brief · session-watcher · notify ·
+                            ics-sync · join-team · create-team · admin-purge (+ _shared/{llm,webpush}.ts)
 src/lib/ctpApi.ts        ← COUCHE D'ACCÈS UNIQUE Supabase (tout écran migré passe par là)
 src/lib/supabase.ts      ← client + flag USE_SUPABASE (.env)
-src/theme/tokens.ts      ← export `da` = tokens DA v2 (utiliser pour tout nouvel écran)
-src/screens/CoachHomeSupabase.tsx / AthleteHomeSupabase.tsx ← écrans migrés de référence
+src/theme/tokens.ts      ← export `courtlight` (fait autorité). `da` a été SUPPRIMÉ (0 consommateur)
+src/screens/CoachHomeSupabase.tsx ← Morning Brief · CoachBoard.tsx ← tableau DAR
+src/screens/QuestionnaireCourtlight.tsx ← check-in · ConsentGate.tsx ← acceptation légale
+(AthleteHomeSupabase / ScheduleScreenSupabase = DÉBRANCHÉS, conservés sans usage)
 screens/Stitch*.js       ← écrans historiques (Login/CreateAccount/Questionnaire = migrés par branches USE_SUPABASE ; le reste = Firebase)
 navigation/StitchNavigator.js ← AuthGate double (Supabase/Firebase) + routage par rôle
 functions/index.js       ← anciennes Cloud Functions Firebase (ENCORE ACTIVES — extinction en M8, pas avant)
@@ -49,24 +58,29 @@ functions/index.js       ← anciennes Cloud Functions Firebase (ENCORE ACTIVES 
 ## 4. Infrastructure (prod)
 - **Supabase** projet `wiopzitygsgincztwquz` (US East). Auth email/password, **Confirm email désactivé** (le réactiver casse l'inscription — quota emails).
 - **Webhook DB** `on-response-submitted` : INSERT `responses` → edge `compute-metrics`.
-- **Crons pg_cron** : `morning-brief-daily` 11h UTC (corps `{}` = toutes équipes) · `ics-sync-15min` (vérifier son existence).
+- **Crons pg_cron** : `morning-brief-daily` 11h UTC · `session-watcher-1min` · `ics-sync-15min` (existence réelle à revérifier).
 - **Secrets** : `ANTHROPIC_API_KEY` via `supabase secrets`. Modèles : quotidien classe Haiku (~0,05 ¢/brief), synthèses lourdes classe Sonnet.
-- **Comptes test** : athlète P-01, coach P-02, équipe « Pilot Team », code `CTP-PILOT`. `.env` local présent (gitignoré).
+- **Comptes test** : équipe « Pilot Team » `b0000000-0000-4000-8000-000000000001`. **Deux codes** : `CTP-PILOT` (athlètes) et un code staff `-C` (voir `select coach_code from teams`).
+- **Données de démonstration** : 15 athlètes `DEMO …`, ~1 200 réponses, 2 mois d'historique. Purge en fin de `supabase/seed_demo_roster.sql`.
+- `.env` local présent (gitignoré). Variables `EXPO_PUBLIC_*` figées à la compilation.
 
-## 5. État & backlog priorisé (détail : docs/01 §5-6)
-✅ Fait : blocs A-D + E1 code (auth, adhésion, questionnaire→Postgres, webhook→calcul, brief LLM, écran coach avec feedback, accueil athlète, import calendrier self-serve coach, moteur v2 z-score, brief multi-équipes, tokens DA).
+## 5. État & backlog priorisé (détail : `HANDOFF/FEATURE_STATUS.md` et `docs/09` §12)
+
+✅ **Vérifié en exécution réelle le 15/08/2026** : notification push reçue sur appareil · check-in soumis · `session_load` et `workload_au` calculés (premiers du projet) · ACWR vivant · tableau coach multi-marqueurs peuplé · consentement horodaté · moteur par athlète validé à zéro écart.
+
+✅ Fait : auth + adhésion à rôle serveur · questionnaire NCAA (5 variantes) · moteur complet (readiness, EMA, zones, charge, ACWR, axes) · Morning Brief LLM · CoachBoard DAR · console santé admin · consentements versionnés · purge et export d'athlète · assets de marque.
 
 Backlog, dans l'ordre :
-1. **Clore E1** : test `ics-sync` en suspens — curl renvoie `upserted:0` ; diagnostiquer via `ics_bytes` (calendrier Google pas public ? → adresse secrète iCal). Limitation connue : TZID traité comme UTC → à corriger proprement.
-2. **E2 Notifications** (priorité produit n° 1 : sans push, la compliance meurt) : cron minute → séances terminées → push athlètes + relances (vision Gabin : 20/40/60 min, table `pendingReminders`) + notif staff quand brief prêt. Choix d'infra À PROPOSER à Gabin avant d'implémenter : Web Push VAPID natif (candidat privilégié, zéro Firebase) vs garder FCM vs email Resend.
-3. **Écrans restants** → migrer sur `ctpApi` : Schedule (lit `sessions`), Profile (+ **logout Supabase**, manquant), Analytics/PerformanceDashboard (lit `daily_metrics`), CoachTeam. Modèle à suivre : `CoachHomeSupabase.tsx`.
-4. **Console admin** (Gabin) : créer org/équipe, lister ses équipes, générer codes, santé des crons. RPC service-role à créer (pattern `join-team`).
-5. **Création de séance in-app** coach (colonnes `planned_load/objective/group_label` prêtes — migration 008) + UI cycles.
-6. **Déploiement Vercel** (`npm run web:build`, sortie `web/dist`, `vercel.json` présent).
-7. **M8 extinction Firebase** : seulement quand E2 fait + run parallèle vérifié (comparer chiffres) ; alors supprimer les CF Firebase, FCM, et les branches `!USE_SUPABASE`.
+1. **Activer 3 à 5 règles d'interprétation** (`docs/02`) — **décision fondateur**, hors développement. Sans elles le brief décrit sans dire ce qui compte.
+2. Confirmation d'email (nécessite un SMTP) · boîte `privacy@` · journal d'accès · MFA staff.
+3. Tester le push sur **iOS** (exige l'installation de la PWA) et les relances +3 h / +6 h en réel.
+4. Performance : `morning-brief` et `ics-sync` en série · `getAdminSystemHealth` en 8N+1 · bucket journalier en UTC alors que `teams.timezone` existe.
+5. Décisions en attente : zones ±10 vs ±15 % · moyenne d'équipe vs distribution · cyan de marque · formulations du questionnaire.
+6. Sélecteur d'équipe (`getMyMembership` est non déterministe en multi-équipes).
+7. **M8 extinction Firebase** : 34 fichiers actifs le référencent encore. Seulement après run parallèle vérifié.
 
 ## 6. Consignes par domaine
-- **Design** : appliquer `docs/03` — tokens `da` de `src/theme/tokens.ts`, fond `#0A0F1E`, UN seul élément lumineux par écran (glow = hiérarchie), zones GREEN/BLUE/YELLOW sacrées (jamais décoratives), jamais d'info par la couleur seule, cibles ≥ 44 pt, contraste AA, animations ≤ 700 ms, budgets : athlète ≤ 60 s, coach ≤ 90 s. 3D : landing seulement, jamais dans les écrans quotidiens.
+- **Design** : appliquer `docs/06` (fait autorité sur le 03) — tokens `courtlight`, fond `#070B14`, UN seul élément lumineux par écran (glow = hiérarchie), zones GREEN/BLUE/YELLOW sacrées (jamais décoratives), jamais d'info par la couleur seule, cibles ≥ 44 pt, contraste AA, animations ≤ 700 ms, budgets : athlète ≤ 60 s, coach ≤ 90 s. 3D : landing seulement, jamais dans les écrans quotidiens.
 - **Moteur/règles** : nouvelles grandeurs de calcul = vues SQL dans une migration (pattern 003/008) + stockage `daily_metrics` + changelog. Les seuils restent en base (table `rules`), jamais en dur dans le code.
 - **LLM** : uniquement `_shared/llm.ts`. Ne jamais élargir le payload au-delà de scores+flags+textes de règles pseudonymisés. Logguer coût dans `llm_logs`.
 - **Data** : toute écriture côté client passe la RLS ; toute écriture privilégiée passe par une edge function service-role. `coach_feedback` est sacré (futur dataset) — ne jamais le purger.

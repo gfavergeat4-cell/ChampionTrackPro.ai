@@ -474,3 +474,82 @@ Des deux valeurs, c'est la fenêtre qui était arbitraire : elle a été invent�
 
 #### Reste au backlog performance
 `morning-brief` enchaîne les appels LLM en série dans une seule invocation (P1-2) · `ics-sync` traite tous les calendriers en série (P1-3) · `getAdminSystemHealth` fait 8 requêtes par équipe (P1-6) · bucket journalier en UTC alors que `teams.timezone` existe et n'est jamais lu (P1-7) · `ics-sync` n'annule jamais une séance retirée du calendrier (P1-8).
+
+### Bloc 17 — Dossier de passation complet (15 août 2026)
+
+Objectif : permettre à un développeur, humain ou agent, de reprendre le projet **sans aucun accès à l'historique des conversations**.
+
+Nouveau dossier `HANDOFF/`, 11 fichiers, ~1 380 lignes :
+
+- **`EXEC_SUMMARY_PASTE_ME.md`** — résumé exécutif à coller dans le premier message du nouveau chat.
+- **`CLAUDE_CODE_HANDOFF.md`** — point d'entrée, règles de reprise, les 7 lois, interdiction de coder avant d'avoir produit un takeover report.
+- **`PROJECT_SOURCE_OF_TRUTH.md`** — 35 sections : produit, flux utilisateurs détaillés, architecture, base (20 tables, 14 vues, 13 fonctions), auth, permissions (matrice complète), edge functions, notifications, calendrier, déploiement, variables d'environnement (noms seuls, aucun secret), sécurité, règles métier, état réel, roadmap, tests, questions ouvertes.
+- **`KNOWN_ISSUES.md`** — 15 bugs ouverts + 15 bugs corrigés **avec les solutions déjà tentées et échouées**. C'est la partie la plus utile : elle évite de refaire les mêmes expériences.
+- **`ARCHITECTURE_DECISIONS.md`** — 16 décisions au format contexte / alternatives / pourquoi / conséquences / réversible ou non.
+- **`FEATURE_STATUS.md`** — 45 fonctionnalités. « Testé » signifie testé en exécution, pas « le code existe ».
+- **`DO_NOT_BREAK.md`** — 16 points critiques.
+- **`PROJECT_INVENTORY.md`** — cartographie fichier par fichier avec rôle, risque et niveau de modification autorisé.
+- **`NEW_CLAUDE_STARTUP_CHECKLIST.md`** — 6 phases, du « comprendre » au « développer ».
+- **`CONTEXT_VERSION.md`** — version 1.0.0, dates d'audit, lacunes de contexte assumées.
+- **`README.md`** — index du dossier.
+
+**Convention de fiabilité appliquée partout** : `CONFIRMED` / `INFERRED` / `UNKNOWN` / `TODO` / `CONFLICTING`. Aucune information manquante n'a été comblée par une hypothèse. Les contradictions non résolues sont listées comme telles — seuils de zone ±10 vs ±15 %, moyenne d'équipe vs distribution, deux palettes, statut `active` de textes juridiques portant un bandeau « Draft ».
+
+**Vérification de cohérence documentation ↔ code exécutée** : les 42 fonctions de `ctpApi` documentées existent toutes · les 16 fichiers cités dans l'inventaire existent tous · comptes SQL exacts (20 tables, 14 vues, 13 fonctions, 19 migrations, 8 edge functions) · un seul écart trouvé et corrigé (34 fichiers référencent Firebase, pas 33).
+
+`CLAUDE.md` porte désormais un bandeau renvoyant vers `HANDOFF/`.
+
+### Bloc 18 — Mode showcase (28 août 2026)
+
+Objectif : livrer des écrans **réels, propres et rejouables** capturables pour une vidéo produit de type walkthrough 3D — et, accessoirement mais avec plus de valeur immédiate, pour le partage d'écran en discovery call.
+
+Nouveau module `src/showcase/` (8 fichiers). **Additif : aucun écran de production modifié.** Seul point de contact avec l'app : un court-circuit `__DEV__` dans `App.js`.
+
+- Trois scènes animées, pilotées par une horloge commune (`useTimeline`). Les scènes sont des **fonctions pures du temps** : à t = 3200 ms l'image est toujours identique, condition pour que deux prises se raccordent au montage. Aucun `Math.random`, aucune animation CSS non déterministe.
+- Scène 1 — check-in athlète, trois états enchaînés (repos → curseurs qui glissent un par un → confirmation). Réutilise le **vrai** `LogoSlider` de production.
+- Scène 2 — Morning Brief, un seul composant qui rend en 9:16 et en 16:9. Jauge d'équipe qui se remplit, scores en compteur, roster en cascade.
+- Scène 3 — détail joueur contre sa baseline personnelle : courbe 21 jours, bande habituelle ±10 (DAR), décomposition par axe. Ouvre sur la divergence physique (−31) / mental (−12).
+- `ShowcaseScreen` : cadre aux proportions exactes, barre d'état iOS factice (aucun chrome navigateur/OS), mode propre, échelle 0,5×–3× pour capturer en HD, boucle automatique.
+- Accès **développement uniquement** : `?showcase=1` sur `npx expo start --web`. Éliminé du build de production par `__DEV__` — des données fictives ne doivent pas être atteignables publiquement.
+
+**Décision fondateur — libellés de statut.** Les one-pagers déjà envoyés à cinq coachs affichent `PUSH / MONITOR / PROTECT`. Ce sont des **impératifs adressés au coach** : ils contredisent l'article 4 de `CONSTITUTION.md` (« jamais de décision automatique de repos ») et le positionnement « le coach décide, toujours ». Remplacés par `READY / WATCH / RECOVER`, qui décrivent l'**état de l'athlète**. Seuils alignés sur la bande DAR déjà en base (`v_axis_zones`, migration 014) : `READY` ≥ −10, `WATCH` entre −20 et −10, `RECOVER` ≤ −20. Libellés centralisés dans `showcaseTheme.ts` → `STATUS`.
+
+**Conséquence à traiter : les one-pagers envoyés à Thune, Rozier, Shelton, Stark et Vaughn portent encore les anciens badges.** À corriger avant le prochain envoi.
+
+`verifyShowcase.ts` : 21 assertions de cohérence (badge == écart recalculé, courbe dans le cadre, pourcentage d'équipe juste, divergence lisible). Toutes passent. `tsc --noEmit` passe sur le module.
+
+### Bloc 19 — Dossier de production vidéo (28 août 2026)
+
+Livrable pour un producteur externe : `MARKETING/CONTENT/DOSSIER_PRODUCTION_VIDEO.html`, autonome, 140 Ko.
+
+**Les 11 écrans du dossier sont le rendu réel des composants de l'app**, pas des maquettes. Nouveau générateur `src/showcase/buildProducerKit.tsx` : il fige l'horloge d'animation à des instants choisis (`freezeTimeline`) et rend les scènes en HTML statique via `react-dom/server`. Rien n'est redessiné, donc rien ne peut être improvisé — c'était la demande explicite du fondateur.
+
+Deux ajouts minimes en support, sans changement de comportement :
+- `useTimeline.ts` : `freezeTimeline(t)`, gel global du temps. `null` = lecture normale, valeur par défaut.
+- `LogoSlider.tsx` : export de `LOGO_SLIDER_CSS`, pour que le curseur s'affiche dans un rendu hors navigateur où les effets ne s'exécutent pas.
+
+Contenu du dossier : règles non négociables (dont trois formulations interdites pour raison juridique), les 4 enregistrements à fournir avec leurs images clés, storyboard en 5 actes minuté, **section méthode DAR**, traitement visuel et sonore, prompt prêt à coller, usage réel de Gemini/Veo, livrables attendus.
+
+**La section DAR est le cœur du dossier.** Elle cite Morin sur trois points, chacun contredisant un réflexe de montage : interdiction de la normalisation interindividuelle (d'où « NOT A TEAM AVERAGE », qui décrit le produit et n'est pas un slogan), lecture couleur + courbe (d'où l'interdiction de recadrer sur le seul badge), trois marqueurs sans score composite (d'où la divergence physique −31 / mental −12 montrée à l'acte 4). Le dossier interdit explicitement de sous-titrer la jauge d'équipe « team score » ou « team average ».
+
+Instants des images ajustés après contrôle des valeurs rendues : jauge à 49 % au lieu de 71 % et courbe à 16 points sur 21 au lieu de 20, pour que la progression soit lisible.
+
+### Bloc 20 — Dossier projet vidéo autonome (28 août 2026)
+
+Consolidation dans `MARKETING/CONTENT/VIDEO_PUB_APP/`, pensé pour qu'un autre agent ou un prestataire reprenne sans contexte préalable.
+
+- `README.md` — point d'entrée : décisions verrouillées avec leur justification, interdits, chaîne de régénération, pièges, état, contradiction de marque non résolue, mise en garde de priorité.
+- `01_BRIEF_DIRECTION_ARTISTIQUE.md` — le raisonnement de DA.
+- `02_DOSSIER_PRODUCTION.html` — le livrable producteur, autonome, 11 écrans intégrés.
+- `IMAGES/` — 11 PNG en 2× + planche contact.
+- `tools/` — `shoot.js`, `sheet.js`, `package.json`, `README.md`. Les scripts de rasterisation sont désormais versionnés au lieu de vivre dans un environnement temporaire.
+
+Deux corrections issues du contrôle visuel image par image :
+- **Barre d'état** : les trois scènes réservaient 0 px en haut, le titre passait sous l'heure du téléphone. Padding haut de 44 px ajouté. Bug réel, présent aussi dans le mode showcase en direct.
+- **Valeur interpolée** : l'image 10 était figée en pleine animation des axes et affichait 25 au lieu de 47. Instant décalé de 3300 à 3020 ms. Règle ajoutée à la documentation : une image fixe ne doit jamais capturer un compteur en cours d'animation.
+
+Deux ajustements de composition : jauge mobile réduite et dégradé de bas d'écran sur le roster (douze athlètes ne tiennent pas sur un téléphone — le dégradé signale la suite au lieu de couper un nom), lignes desktop plus hautes pour remplir le 16:9.
+
+**Conséquence éditoriale : la légende de l'acte 3 a été scindée.** « YOUR WHOLE ROSTER. ONE SCREEN. » est fausse sur le plan mobile et vraie sur le plan desktop. Le storyboard bascule donc sur le 16:9 letterboxé à 0:21 pour porter cette phrase, ce qui a le bénéfice secondaire de montrer que l'outil existe aussi sur l'ordinateur du bureau.
+
+`frames.ts` devient la source unique des images : le document de production et l'export PNG le lisent tous les deux, donc aucune image ne peut diverger de sa description.
