@@ -200,3 +200,26 @@ Recensé pour éviter la répétition :
 **BÉNÉFICE SECONDAIRE** `session-watcher` filtre déjà `cancelled = false` (ligne 111) : la correction à la source supprime aussi les fausses notifications sans y toucher.
 **NON VÉRIFIÉ** Edge function non redéployée (`supabase functions deploy ics-sync` requis) — testé par lecture de code et `tsc`/build uniquement, pas en exécution réelle contre un vrai calendrier.
 **FICHIERS** `supabase/functions/ics-sync/index.ts`
+
+## FIXED-19 · `morning-brief-daily` renvoyait 403 en silence depuis 34 jours (18/09/2026)
+**GRAVITÉ** Critique — panne totale, silencieuse, de la fonctionnalité qui constitue la valeur centrale du produit.
+**SYMPTÔME** Aucun Morning Brief généré entre le 15 août et le 18 septembre 2026 (34 jours), alors que `select * from cron.job_run_details` indiquait `status = succeeded` chaque jour à 11h00 UTC.
+**CAUSE RACINE** Le commit de durcissement sécurité du 15/08 (`e134a1e`) a ajouté une garde `isServiceRole()` à `morning-brief` (doc 11 P0-3 : sans elle, n'importe qui muni de la clé anon peut déclencher un brief sur l'équipe de son choix). Le job `cron.job` `morning-brief-daily`, lui, avait été créé **avant** cette garde avec un jeton **anon**, jamais mis à jour depuis. Chaque appel quotidien recevait donc `403 forbidden` — confirmé en lisant directement `net._http_response` (`body: "forbidden"`, `status_code: 403`, horodaté exactement 11:00:00 chaque jour).
+**POURQUOI PERSONNE NE L'A VU** `cron.job_run_details.status` ne reflète que la réussite de la *soumission* de la requête HTTP asynchrone via `pg_net`, jamais le code de statut de la réponse. Un `succeeded` au niveau pg_cron ne garantit rien sur ce que l'edge function a réellement fait — même angle mort que BUG-12 (`safe()`), à un niveau d'infrastructure différent.
+**CORRECTIF** Jeton `service_role` (déjà utilisé par `session-watcher-1min`, qui fonctionnait) réinjecté dans le job via `cron.unschedule` + `cron.schedule`, sans jamais faire transiter le jeton en clair par un canal visible (extraction et réinjection dans un seul bloc `DO $$` côté serveur).
+**VÉRIFIÉ** Invocation manuelle immédiate après correctif → `200 "ok"` → nouvelle ligne dans `briefs` pour 2026-09-18, coût réel `$0.00045`, modèle `claude-haiku-4-5-20251001`. La chaîne complète (garde → lecture métriques → appel LLM → écriture `briefs` + `llm_logs` → push staff) fonctionne de bout en bout.
+**RESTE À FAIRE** Vérifier `ics-sync-15min` (créé le même jour, voir plus bas) et tout autre job `pg_cron` existant ou futur contre la même classe d'erreur à chaque ajout de garde `isServiceRole()`/`isAdmin()` sur une edge function invoquée par cron.
+**FICHIERS** Aucun fichier de code — réglage `cron.job` en base uniquement.
+
+## FIXED-20 · `ics-sync-15min` n'existait pas en production (18/09/2026)
+**CONTEXTE** Question ouverte n° 8 de `PROJECT_SOURCE_OF_TRUTH.md` §34 : « `ics-sync-15min` existe-t-il réellement en production ? » — **Réponse : non**, confirmé par `select * from cron.job` (seuls `morning-brief-daily` et `session-watcher-1min` existaient).
+**IMPACT** Le calendrier ne se synchronisait jamais automatiquement. Seul le bouton « Sync Now » d'un coach déclenchait `ics-sync` — sans clic manuel régulier, aucune nouvelle séance, donc aucune notification de check-in.
+**CORRECTIF** Job créé (`*/15 * * * *`), même jeton `service_role` que `session-watcher-1min`, même méthode d'extraction sans exposition.
+**NON VÉRIFIÉ** Aucune équipe pilote n'a de `ics_url` renseignée activement testée depuis ; le prochain déclenchement réel (15 min max) reste à observer dans les logs de la fonction.
+**FICHIERS** Aucun fichier de code — réglage `cron.job` en base uniquement.
+
+## 🚨 Incident — clé service_role exposée dans une session Claude (18/09/2026)
+**QUOI** En inspectant `cron.job.command` pour comprendre comment reproduire l'authentification de `session-watcher-1min`, la commande complète — jeton `service_role` en clair inclus — a été affichée dans la sortie d'un outil, donc dans la transcription de la session.
+**PORTÉE** Le jeton `service_role` contourne intégralement la RLS sur toute la base. Sa présence en clair dans `cron.job.command` est **antérieure** à cet incident (c'est déjà comme ça que `session-watcher-1min` et `morning-brief-daily` fonctionnent) — l'incident est sa **ré-exposition dans un canal supplémentaire** (la session).
+**ACTION REQUISE — fondateur** Rotation de la clé `service_role` depuis le tableau de bord Supabase (Settings → API). **Conséquence en cascade** : `session-watcher-1min`, `morning-brief-daily` et `ics-sync-15min` référencent tous l'ancienne clé dans `cron.job.command` et cesseront de fonctionner (403/401) jusqu'à ce que les trois jobs soient recréés avec la nouvelle clé.
+**AMÉLIORATION STRUCTURELLE À CONSIDÉRER** Stocker le jeton une fois via `vault`/`app.settings` plutôt que dans le texte de la commande `cron.job`, pour qu'une rotation future n'exige pas de retoucher trois jobs à la main.

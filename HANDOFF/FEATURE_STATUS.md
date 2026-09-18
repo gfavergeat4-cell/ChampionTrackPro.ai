@@ -8,7 +8,7 @@ Audit du 15 août 2026. Statuts autorisés : `DONE` · `PARTIAL` · `IN PROGRESS
 |---|---|---|---|---|---|---|
 | Authentification email / mot de passe | DONE | ✓ | ✓ | ✓ | ✓ | Confirmation d'email **désactivée** — BUG-01 |
 | Adhésion par code, rôle serveur | DONE | ✓ | ✓ | ✓ | partiel | Testé en création ; **le rejet d'un athlète tentant `-C` n'a pas été testé** |
-| Création d'équipe depuis l'app | DONE | ✓ | ✓ | ✓ | ✗ | Réparée le 15/08 — n'avait **jamais** fonctionné. À tester en priorité |
+| Création d'équipe depuis l'app | DONE | ✓ | ✓ | ✓ | ✓ | Testée en conditions réelles le 18/09 (compte de test, nettoyé après coup) — la toute première vérification depuis le fix du 15/08 |
 | Isolation multi-tenant (RLS) | DONE | — | ✓ | ✓ | partiel | Matrice complète dans `docs/11`. Jamais testée avec deux équipes réelles |
 | Import calendrier iCal | PARTIAL | ✓ | ✓ | ✓ | partiel | Fonctionne. Annulation des séances retirées codée le 18/09 (FIXED-18) — **edge function pas encore redéployée**, donc pas encore vécu en production |
 | Détection de fin de séance | DONE | — | ✓ | ✓ | ✓ | Rattrapage 3 h, idempotent |
@@ -25,7 +25,7 @@ Audit du 15 août 2026. Statuts autorisés : `DONE` · `PARTIAL` · `IN PROGRESS
 | Moteur par athlète (`f_engine_user`) | DONE | — | ✓ | ✓ | ✓ | Non-régression : zéro écart |
 | Règles d'interprétation | BLOCKED | — | ✓ | ✓ | ✗ | Mécanisme complet, **zéro règle activée**. Décision fondateur |
 | Flags | BLOCKED | ✗ | ✓ | ✓ | ✗ | Reste vide tant qu'aucune règle n'est active |
-| Morning Brief (LLM) | DONE | ✓ | ✓ | ✓ | partiel | Génère un texte. Sans règles, purement descriptif |
+| Morning Brief (LLM) | DONE | ✓ | ✓ | ✓ | ✓ | **Panne silencieuse de 34 jours (16/08→18/09) corrigée le 18/09** — cron avec jeton anon rejeté 403 par la garde service-role ajoutée le 15/08 (FIXED-19). Fonctionne à nouveau, vérifié en exécution réelle. Sans règles, reste purement descriptif |
 | Feedback coach (Useful / Noise) | DONE | ✓ | ✓ | ✓ | partiel | `acknowledged` / `overridden` **non exposés à l'interface** |
 | Tableau coach multi-marqueurs | DONE | ✓ | ✓ | ✓ | ✓ | `CoachBoard`. Motif déclenché sur un seul jour — BUG-11 |
 | Fiche joueur | PARTIAL | ✓ | ✓ | ✓ | partiel | Rebranchée. Pas encore les trois séries avec bande ±10 |
