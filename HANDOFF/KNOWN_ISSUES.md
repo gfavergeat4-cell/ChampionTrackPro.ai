@@ -23,13 +23,6 @@
 **CONSÉQUENCE** Tout incident devient une notification au périmètre maximal. C'est la troisième question d'un service juridique universitaire.
 **PROCHAINE ACTION** `docs/14_DURCISSEMENT_SECURITE.md` P1-4 contient la conception.
 
-## BUG-03 · `ics-sync` n'annule jamais une séance retirée du calendrier
-**STATUS** OPEN
-**SYMPTÔME** Un coach supprime un entraînement de son calendrier ; la séance reste en base, les athlètes reçoivent une notification pour une séance qui n'a pas eu lieu.
-**CAUSE RACINE** La synchronisation ne fait qu'`upsert`. Aucun mécanisme de réconciliation ni de `cancelled = true`.
-**PROCHAINE ACTION** Marquer `cancelled` les séances dont l'`ics_uid` a disparu du flux, sur la fenêtre synchronisée. Ne pas supprimer : des réponses peuvent y être rattachées.
-**FICHIERS** `supabase/functions/ics-sync/index.ts`
-
 ## BUG-04 · Le bucket journalier est en UTC alors que `teams.timezone` existe
 **STATUS** OPEN
 **SYMPTÔME** Une séance de fin d'après-midi en Californie est comptabilisée sur le jour suivant.
@@ -76,18 +69,6 @@
 **CAUSE RACINE** Le seuil est binaire, sans critère de récurrence, alors que Morin insiste : *« le critère temporel reste central »*.
 **PROCHAINE ACTION** Deux options proposées au fondateur — exiger 3 jours consécutifs, et/ou graduer l'affichage (pastille entre +10 et +15, motif nommé au-delà). Non tranché.
 **FICHIERS** `src/screens/CoachBoard.tsx`, fonction `pattern()`
-
-## BUG-12 · `safe()` transforme une erreur de permission en « pas de données »
-**STATUS** OPEN — piège de diagnostic
-**SYMPTÔME** Un écran affiche zéro donnée sans aucune erreur, alors que la requête a été refusée.
-**CAS RÉEL** Le `CoachBoard` affichait « 0 of 16 » à cause d'un `revoke select` — aucun message nulle part. Une heure perdue.
-**PROCHAINE ACTION** Faire remonter l'erreur au lieu de l'avaler, au moins en console.
-**FICHIERS** `src/lib/ctpApi.ts`, fonction `safe()`
-
-## BUG-13 · Faux gras sur toute l'interface
-**STATUS** OPEN
-**CAUSE RACINE** `Inter_700Bold` n'est pas chargé dans `App.js`, alors que `fontWeight: 700` est utilisé ~59 fois. Le navigateur synthétise un gras — rendu épaissi et sale.
-**PROCHAINE ACTION** Charger la graisse 700, ou retirer tous les 700 (le doc `06` privilégie la finesse).
 
 ## BUG-14 · Polices déclarées mais jamais chargées
 **STATUS** OPEN
@@ -195,3 +176,27 @@ Recensé pour éviter la répétition :
 - `babel-preset-expo` absent de `package.json`, fonctionnait grâce à un `node_modules` pollué → `npx expo install babel-preset-expo`.
 - `git rev-parse HEAD` dans le script de build → échec des déploiements CLI (`fatal: not a git repository`) → retiré.
 - Écriture d'un gros fichier `.tsx` à travers un montage réseau → **troncature silencieuse**. Restauré en trois ajouts avec vérification du nombre de lignes et de l'équilibre des accolades.
+
+## FIXED-16 · `safe()` transformait une erreur de permission en « pas de données » (ex-BUG-12)
+**CORRIGÉ LE** 18/09/2026
+**SYMPTÔME** Un écran affichait zéro donnée sans aucune erreur, alors que la requête avait été refusée (`CoachBoard` à « 0 of 16 » lors de l'incident `revoke select` — une heure perdue, cf. FIXED-12).
+**CAUSE RACINE** `safe()` déstructurait `{ data }` et ignorait `error` — Supabase-js renvoie `{ data: null, error }` **sans lever d'exception** sur un refus RLS ; le `catch` ne se déclenchait donc jamais.
+**CORRECTIF** `error` est désormais destructuré et loggué en console (`[ctpApi] safe() query failed: …`) avant le repli sur `fallback`. Le `catch` logue aussi (`[ctpApi] safe() threw: …`) pour les échecs réseau. **Comportement inchangé** : la fonction retourne toujours `fallback`, aucun écran ne peut casser — seule la visibilité change.
+**PORTÉE** Les 9 appelants de `safe()`, dont `getCoachBoard` et `getPendingConsents`.
+**FICHIERS** `src/lib/ctpApi.ts`
+
+## FIXED-17 · Faux gras sur toute l'interface (ex-BUG-13)
+**CORRIGÉ LE** 18/09/2026
+**CAUSE RACINE** `Inter_700Bold` n'était pas chargé dans `App.js` alors que `fontWeight: 700` est utilisé ~59 fois ; le navigateur synthétisait un gras.
+**CORRECTIF** Poids ajouté à l'import `@expo-google-fonts/inter` et à `useFonts`.
+**FICHIERS** `App.js`
+
+## FIXED-18 · `ics-sync` n'annulait jamais une séance retirée du calendrier (ex-BUG-03)
+**CORRIGÉ LE** 18/09/2026
+**SYMPTÔME** Un coach supprimait un entraînement de son calendrier ; la séance restait en base, les athlètes recevaient une notification pour une séance qui n'avait pas eu lieu.
+**CAUSE RACINE** La synchronisation ne faisait qu'`upsert`. Aucun mécanisme de réconciliation ni de `cancelled = true`.
+**CORRECTIF** Après l'upsert du lot synchronisé, lecture des séances non annulées de l'équipe dans la fenêtre `[now-30j, now+180j]`, différence avec les `ics_uid` du flux courant, et `update cancelled = true` par `id` sur celles qui ont disparu. Ne supprime jamais une ligne (des réponses peuvent y être rattachées, cf. `DO_NOT_BREAK.md` #4).
+**GARDE** La réconciliation ne s'exécute que si la réponse HTTP ressemble à un calendrier ICS valide (`is_ics`) — une réponse vide ou une erreur de fetch ne doit jamais être lue comme « plus aucun événement », qui annulerait tout le roster.
+**BÉNÉFICE SECONDAIRE** `session-watcher` filtre déjà `cancelled = false` (ligne 111) : la correction à la source supprime aussi les fausses notifications sans y toucher.
+**NON VÉRIFIÉ** Edge function non redéployée (`supabase functions deploy ics-sync` requis) — testé par lecture de code et `tsc`/build uniquement, pas en exécution réelle contre un vrai calendrier.
+**FICHIERS** `supabase/functions/ics-sync/index.ts`

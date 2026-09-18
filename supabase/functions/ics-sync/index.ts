@@ -325,6 +325,41 @@ Deno.serve(async (req: Request) => {
         if (error) { console.error("[ICS] upsert batch:", error.message); errors++; }
         else total += count ?? chunk.length;
       }
+
+      // BUG-03 (HANDOFF/KNOWN_ISSUES.md) : un entraînement retiré du calendrier
+      // ne disparaissait jamais de `sessions` — les athlètes étaient notifiés
+      // pour une séance qui n'avait plus lieu. On ne supprime jamais une ligne
+      // (des réponses peuvent y être rattachées) : on marque `cancelled`
+      // celles dont l'`ics_uid` a disparu du flux, sur la fenêtre synchronisée.
+      // Garde `td.is_ics` : une réponse qui n'est pas un calendrier valide ne
+      // doit jamais être interprétée comme « plus aucun événement ».
+      if (td.is_ics) {
+        const syncedUids = new Set(rows.map((r) => r.ics_uid).filter(Boolean) as string[]);
+        const { data: existing, error: existErr } = await supa.from("sessions")
+          .select("id, ics_uid")
+          .eq("team_id", t.id)
+          .eq("cancelled", false)
+          .not("ics_uid", "is", null)
+          .gte("start_utc", new Date(wStart).toISOString())
+          .lte("start_utc", new Date(wEnd).toISOString());
+        if (existErr) {
+          console.error("[ICS] reconciliation read:", existErr.message);
+        } else {
+          const removedIds = (existing ?? [])
+            .filter((s) => !syncedUids.has(s.ics_uid as string))
+            .map((s) => s.id);
+          if (removedIds.length) {
+            const { error: cancelErr } = await supa.from("sessions")
+              .update({ cancelled: true })
+              .in("id", removedIds);
+            if (cancelErr) { console.error("[ICS] cancel reconciliation:", cancelErr.message); errors++; }
+            else {
+              td.cancelled_reconciled = removedIds.length;
+              console.log("[ICS] team", t.id, "cancelled (removed from feed):", removedIds.length);
+            }
+          }
+        }
+      }
     } catch (e) {
       console.error("[ICS] team", t.id, String(e));
       td.error = String(e);

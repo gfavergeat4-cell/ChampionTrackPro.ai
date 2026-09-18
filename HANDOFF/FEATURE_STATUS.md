@@ -10,7 +10,7 @@ Audit du 15 août 2026. Statuts autorisés : `DONE` · `PARTIAL` · `IN PROGRESS
 | Adhésion par code, rôle serveur | DONE | ✓ | ✓ | ✓ | partiel | Testé en création ; **le rejet d'un athlète tentant `-C` n'a pas été testé** |
 | Création d'équipe depuis l'app | DONE | ✓ | ✓ | ✓ | ✗ | Réparée le 15/08 — n'avait **jamais** fonctionné. À tester en priorité |
 | Isolation multi-tenant (RLS) | DONE | — | ✓ | ✓ | partiel | Matrice complète dans `docs/11`. Jamais testée avec deux équipes réelles |
-| Import calendrier iCal | PARTIAL | ✓ | ✓ | ✓ | ✓ | Fonctionne. **N'annule jamais une séance retirée** — BUG-03 |
+| Import calendrier iCal | PARTIAL | ✓ | ✓ | ✓ | partiel | Fonctionne. Annulation des séances retirées codée le 18/09 (FIXED-18) — **edge function pas encore redéployée**, donc pas encore vécu en production |
 | Détection de fin de séance | DONE | — | ✓ | ✓ | ✓ | Rattrapage 3 h, idempotent |
 | Notifications push (Web Push VAPID) | PARTIAL | ✓ | ✓ | ✓ | ✓ Android/desktop | **iOS jamais testé** — exige l'installation de la PWA |
 | Relances +3 h / +6 h | PARTIAL | — | ✓ | ✓ | ✗ | Programmation vérifiée ; **déclenchement réel jamais observé** |
