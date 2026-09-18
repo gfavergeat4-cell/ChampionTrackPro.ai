@@ -542,9 +542,27 @@ export interface TeamHealth {
   icsConfigured: boolean;
 }
 
-async function safe<T>(p: PromiseLike<{ data: T | null }>, fallback: T): Promise<T> {
-  try { const { data } = await p; return (data ?? fallback) as T; }
-  catch { return fallback; }
+/**
+ * BUG-12 (HANDOFF/KNOWN_ISSUES.md) : un `revoke select` ou toute policy RLS
+ * manquante renvoie `{ data: null, error }` SANS lever d'exception — l'ancien
+ * `safe()` ignorait `error` et l'écran affichait silencieusement "aucune
+ * donnée". C'est ce qui a fait perdre une heure sur `CoachBoard` ("0 of 16").
+ * Le comportement (retourner `fallback`) ne change pas ; seule la visibilité
+ * change, en console, pour que l'échec soit diagnosticable au lieu d'être
+ * confondu avec une absence légitime de données.
+ */
+async function safe<T>(
+  p: PromiseLike<{ data: T | null; error: { message: string } | null }>,
+  fallback: T,
+): Promise<T> {
+  try {
+    const { data, error } = await p;
+    if (error) console.error("[ctpApi] safe() query failed:", error.message);
+    return (data ?? fallback) as T;
+  } catch (err) {
+    console.error("[ctpApi] safe() threw:", err);
+    return fallback;
+  }
 }
 
 /**

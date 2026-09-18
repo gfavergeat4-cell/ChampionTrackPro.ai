@@ -156,6 +156,11 @@ const CSS = `
 }
 `;
 
+/** Styles du composant, exposés pour les rendus hors navigateur (kit producteur
+ *  du showcase, qui rend en HTML statique sans que les effets s'exécutent).
+ *  Ne change rien au comportement du composant. */
+export const LOGO_SLIDER_CSS = CSS;
+
 function useInjectedStyle() {
   React.useEffect(() => {
     if (typeof document === "undefined") return;
